@@ -1,14 +1,14 @@
 import React from "react";
 import "../styles/topbar.css";
 
-export default function TopBar() {
+export default function TopBar({ activeView }) {
   return (
     <div className="topbar">
-      <h3>Welcome to BeatForge</h3>
-
-      <div className="right">
-        <button className="save-btn">Save</button>
-      </div>
+      {/* Dynamically update the title based on the active view */}
+      <h2>{activeView}</h2>
+      
+      {/* You can keep your save button or other transport controls here */}
+      <button className="save-btn">Save Project</button>
     </div>
   );
 }

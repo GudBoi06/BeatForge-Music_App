@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import "./knob.css";
 
 export default function Knob({
@@ -11,6 +11,13 @@ export default function Knob({
 }) {
   const startY = useRef(0);
   const startValue = useRef(value);
+
+  const [localValue, setLocalValue] = useState(value);
+
+useEffect(() => {
+  setLocalValue(value);
+}, [value]);
+
 
   const rotation =
     ((value - min) / (max - min)) * 270 - 135;
@@ -87,20 +94,47 @@ export default function Knob({
 
     <div className="knob-info">
       <input
-        type="number"
-        className="knob-input"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onWheel={onWheel}
-        onChange={(e) => {
-            const v = Number(e.target.value);
-            if (!isNaN(v)) {
-            onChange(Math.min(max, Math.max(min, v)));
+          type="number"
+          className="knob-input"
+          value={localValue}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(e) => {
+            // Allow typing, but NOT empty
+            const val = e.target.value;
+
+            if (val === "") {
+              setLocalValue("");
+              return;
             }
-        }}
+
+            // Allow only numbers
+            if (!/^\d+$/.test(val)) return;
+
+            setLocalValue(val);
+          }}
+          onBlur={() => {
+            let v = Number(localValue);
+
+            // If empty or invalid → snap to min
+            if (!localValue || isNaN(v)) {
+              v = min;
+            }
+
+            // Clamp strictly
+            v = Math.min(max, Math.max(min, v));
+
+            setLocalValue(v);
+            onChange(v);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.target.blur();
+            }
+          }}
         />
+
       <div className="knob-label">{label}</div>
     </div>
   </div>

@@ -1,16 +1,24 @@
 import React from "react";
 import "../styles/sidebar.css";
 
-export default function Sidebar() {
+export default function Sidebar({ activeView, setActiveView }) {
+  // Array of menu items makes it easy to map over and apply the active class
+  const menuItems = ["Step Sequencer", "Beat Maker", "My Samples", "Settings"];
+
   return (
     <div className="sidebar">
       <h2 className="logo">BeatForge</h2>
 
       <div className="menu">
-        <p className="menu-item active">Dashboard</p>
-        <p className="menu-item">Beat Maker</p>
-        <p className="menu-item">My Samples</p>
-        <p className="menu-item">Settings</p>
+        {menuItems.map((item) => (
+          <p
+            key={item}
+            className={`menu-item ${activeView === item ? "active" : ""}`}
+            onClick={() => setActiveView(item)}
+          >
+            {item}
+          </p>
+        ))}
       </div>
     </div>
   );
