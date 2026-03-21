@@ -4,15 +4,25 @@ import TopBar from "../components/TopBar";
 import StepSequencer from "../components/StepSequencer";
 import "../styles/home.css";
 
-export default function Home() {
-  // State to track which tool is currently open
+export default function Home({ currentUser, onLogout }) {
   const [activeView, setActiveView] = useState("Step Sequencer");
+  
+  // 🎛️ MASTER AUDIO ENGINE STATES
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [bpm, setBpm] = useState(120);
+  const [masterVolume, setMasterVolume] = useState(0.8);
 
-  // A switch function to change the workspace content
   const renderWorkspace = () => {
     switch (activeView) {
       case "Step Sequencer":
-        return <StepSequencer />;
+        return (
+          <StepSequencer 
+            isPlaying={isPlaying} 
+            bpm={bpm} 
+            setBpm={setBpm} // Passed so presets can still change the master BPM
+            masterVolume={masterVolume} 
+          />
+        );
       case "Beat Maker":
         return <div style={{ padding: "40px", color: "var(--text-muted)" }}>Beat Maker Workstation (Coming Soon)</div>;
       case "My Samples":
@@ -20,18 +30,27 @@ export default function Home() {
       case "Settings":
         return <div style={{ padding: "40px", color: "var(--text-muted)" }}>BeatForge Settings</div>;
       default:
-        return <StepSequencer />;
+        return <StepSequencer isPlaying={isPlaying} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} />;
     }
   };
 
   return (
     <div className="home-layout">
-      {/* Pass the state to the Sidebar so it knows what to highlight */}
       <Sidebar activeView={activeView} setActiveView={setActiveView} />
 
       <div className="main-area">
-        {/* Pass the state to TopBar so it can update the title */}
-        <TopBar activeView={activeView} />
+        {/* Pass the Master Controls to the TopBar */}
+        <TopBar 
+          activeView={activeView} 
+          currentUser={currentUser} 
+          onLogout={onLogout}
+          isPlaying={isPlaying}
+          setIsPlaying={setIsPlaying}
+          bpm={bpm}
+          setBpm={setBpm}
+          masterVolume={masterVolume}
+          setMasterVolume={setMasterVolume}
+        />
 
         <div className="workspace">
           {renderWorkspace()}

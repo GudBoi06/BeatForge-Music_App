@@ -8,150 +8,88 @@ const sounds = [
   { name: "HiHat", file: "/sounds/hihat.wav" }
 ];
 
-export default function StepSequencer() {
-  /* ===========================
-     STATE (UI ONLY)
-  ============================ */
+// 🔌 Receive the Master Controls from Home.jsx
+export default function StepSequencer({ isPlaying, bpm, setBpm, masterVolume }) {
   const [stepsCount, setStepsCount] = useState(16);
   const [grid, setGrid] = useState(sounds.map(() => Array(16).fill(false)));
   const [volumes, setVolumes] = useState([1, 1, 1]);
-  const [bpm, setBpm] = useState(120);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [presets, setPresets] = useState([]);
   const [presetName, setPresetName] = useState("");
-  const [contextMenu, setContextMenu] = useState({visible: false,x: 0,y: 0,rowIndex: null,startStep: 0});
+  const [contextMenu, setContextMenu] = useState({visible: false, x: 0, y: 0, rowIndex: null, startStep: 0});
+  const [mutedTracks, setMutedTracks] = useState(sounds.map(() => false));
 
-  /* ===========================
-     REFS (AUDIO ENGINE)
-  ============================ */
   const gridRef = useRef(grid);
   const volumeRef = useRef(volumes);
   const stepRef = useRef(0);
   const intervalRef = useRef(null);
-  const dragMode = useRef(null); // "paint" | "erase"
+  const dragMode = useRef(null);
   const isDraggingRef = useRef(false); 
   const audioPlayersRef = useRef({});
-  const [masterVolume, setMasterVolume] = useState(0.8);
   const masterVolumeRef = useRef(masterVolume);
-  const [mutedTracks, setMutedTracks] = useState(sounds.map(() => false));
   const mutedTracksRef = useRef(mutedTracks);
 
-  /* ===========================
-     KEEP REFS IN SYNC
-  ============================ */
-  useEffect(() => {
-    gridRef.current = grid;
-  }, [grid]);
+  useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(() => { volumeRef.current = volumes; }, [volumes]);
+  useEffect(() => { masterVolumeRef.current = masterVolume; }, [masterVolume]);
+  useEffect(() => { mutedTracksRef.current = mutedTracks; }, [mutedTracks]);
 
   useEffect(() => {
-    volumeRef.current = volumes;
-  }, [volumes]);
-
-  useEffect(() => {
-    masterVolumeRef.current = masterVolume;
-  }, [masterVolume]);
-  
-  useEffect(() => {
-    mutedTracksRef.current = mutedTracks;
-  }, [mutedTracks]);
-
-
-  /* ===========================
-     REBUILD GRID ON STEP CHANGE
-  ============================ */
-  useEffect(() => {
-  setGrid(prevGrid => {
-    return prevGrid.map(row => {
-      // If steps increased → add empty steps
-      if (row.length < stepsCount) {
-        return [
-          ...row,
-          ...Array(stepsCount - row.length).fill(false)
-        ];
-      }
-
-      // If steps decreased → trim extra steps
-      if (row.length > stepsCount) {
-        return row.slice(0, stepsCount);
-      }
-
-      return row;
+    setGrid(prevGrid => {
+      return prevGrid.map(row => {
+        if (row.length < stepsCount) return [...row, ...Array(stepsCount - row.length).fill(false)];
+        if (row.length > stepsCount) return row.slice(0, stepsCount);
+        return row;
+      });
     });
-  });
+    stepRef.current = stepRef.current % stepsCount;
+    setCurrentStep(stepRef.current);
+  }, [stepsCount]);
 
-  // Keep playback position valid
-  stepRef.current =
-    stepRef.current % stepsCount;
-  setCurrentStep(stepRef.current);
-}, [stepsCount]);
+  const preloadSounds = () => {
+    sounds.forEach(sound => {
+      if (!audioPlayersRef.current[sound.file]) {
+        const audio = new Audio(sound.file);
+        audio.preload = "auto";
+        audioPlayersRef.current[sound.file] = audio;
+      }
+    });
+  };
 
-
-  /* ===========================
-     AUDIO PLAYBACK (CORE)
-  ============================ */
   const playStep = () => {
-  sounds.forEach((sound, rowIndex) => {
-    if (
-      gridRef.current[rowIndex][stepRef.current] &&
-      !mutedTracksRef.current[rowIndex] 
-    ) {
-      const audio = audioPlayersRef.current[sound.file];
-      if (!audio) return;
-
-      audio.currentTime = 0;
-      audio.volume =
-        volumeRef.current[rowIndex] * masterVolumeRef.current;
-      audio.play();
-    }
-  });
-
-  setCurrentStep(stepRef.current);
-  stepRef.current = (stepRef.current + 1) % stepsCount;
-};
-
-
-
-  /* ===========================
-     TRANSPORT CONTROLS
-  ============================ */
-  const start = () => {
-    if (isPlaying) return;
-    setIsPlaying(true);
+    sounds.forEach((sound, rowIndex) => {
+      if (gridRef.current[rowIndex][stepRef.current] && !mutedTracksRef.current[rowIndex]) {
+        const audio = audioPlayersRef.current[sound.file];
+        if (!audio) return;
+        audio.currentTime = 0;
+        audio.volume = volumeRef.current[rowIndex] * masterVolumeRef.current;
+        audio.play().catch(e => console.log("Audio play blocked by browser:", e));
+      }
+    });
+    setCurrentStep(stepRef.current);
+    stepRef.current = (stepRef.current + 1) % stepsCount;
   };
 
-  const stop = () => {
-    clearInterval(intervalRef.current);
-    intervalRef.current = null;
-    setIsPlaying(false);
-    stepRef.current = 0;
-    setCurrentStep(0);
-  };
-
-  const clearBeat = () => {
-    setGrid(sounds.map(() => Array(stepsCount).fill(false)));
-    stepRef.current = 0;
-    setCurrentStep(0);
-  };
-
-  /* ===========================
-     REAL-TIME BPM ENGINE
-  ============================ */
+  // 🎧 The Master Engine Loop (Reacts to TopBar)
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      stepRef.current = 0;
+      setCurrentStep(0);
+      return;
+    }
 
+    preloadSounds();
     clearInterval(intervalRef.current);
-
     const stepTime = (60 / bpm) * 1000 / 4;
-
     intervalRef.current = setInterval(playStep, stepTime);
 
     return () => clearInterval(intervalRef.current);
-  }, [bpm, isPlaying, stepsCount]);
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, bpm, stepsCount]);
 
-  /* ===========================
-     STEP UPDATE (PAINT / ERASE)
-  ============================ */
   const updateStep = (row, step, value) => {
     setGrid(prev => {
       const copy = prev.map(r => [...r]);
@@ -160,440 +98,228 @@ export default function StepSequencer() {
     });
   };
 
-  const handleBpmWheel = (e) => {
-  e.preventDefault();
-  const delta = e.deltaY < 0 ? 1 : -1;
-  setBpm((prev) =>
-    Math.min(200, Math.max(60, prev + delta))
-  );
-};
-
-const handleStepsWheel = (e) => {
-  e.preventDefault();
-  const delta = e.deltaY < 0 ? 1 : -1;
-  setStepsCount((prev) =>
-    Math.min(32, Math.max(4, prev + delta))
-  );
-};
-
-const preloadSounds = () => {
-  sounds.forEach(sound => {
-    if (!audioPlayersRef.current[sound.file]) {
-      const audio = new Audio(sound.file);
-      audio.preload = "auto";
-      audioPlayersRef.current[sound.file] = audio;
-    }
-  });
-};
-
-/* ===========================
-     SAVE / STATE PRESETS
-  ============================ */
+  const clearBeat = () => {
+    setGrid(sounds.map(() => Array(stepsCount).fill(false)));
+    stepRef.current = 0;
+    setCurrentStep(0);
+  };
 
   useEffect(() => {
-  const saved = localStorage.getItem("beatforge-presets");
-  if (saved) {
-    setPresets(JSON.parse(saved));
-  }
-}, []);
+    const saved = localStorage.getItem("beatforge-presets");
+    if (saved) setPresets(JSON.parse(saved));
+  }, []);
 
-const savePreset = () => {
-  if (!presetName.trim()) return;
-
-  const existingIndex = presets.findIndex(
-    p => p.name.toLowerCase() === presetName.toLowerCase()
-  );
-
-  if (existingIndex !== -1) {
-    const confirmOverwrite = window.confirm(
-      "Preset already exists. Overwrite it?"
-    );
-
-    if (!confirmOverwrite) return;
-
-    const updated = [...presets];
-    updated[existingIndex] = {
-      ...updated[existingIndex],
-      bpm,
-      stepsCount,
-      grid,
-      volumes,
-      mutedTracks,
-      createdAt: Date.now()
-    };
-
+  const savePreset = () => {
+    if (!presetName.trim()) return;
+    const newPreset = { name: presetName, bpm, stepsCount, grid, volumes, mutedTracks, createdAt: Date.now() };
+    const updated = [...presets, newPreset];
     setPresets(updated);
-    localStorage.setItem(
-      "beatforge-presets",
-      JSON.stringify(updated)
-    );
-
+    localStorage.setItem("beatforge-presets", JSON.stringify(updated));
     setPresetName("");
-    return;
-  }
-
-  const newPreset = {
-    name: presetName,
-    bpm,
-    stepsCount,
-    grid,
-    volumes,
-    mutedTracks,
-    createdAt: Date.now()
   };
 
-  const updated = [...presets, newPreset];
-  setPresets(updated);
-  localStorage.setItem(
-    "beatforge-presets",
-    JSON.stringify(updated)
-  );
+  const loadPreset = (preset) => {
+    if (!preset) return;
+    setBpm(preset.bpm);
+    setStepsCount(preset.stepsCount);
+    setGrid(preset.grid);
+    setVolumes(preset.volumes);
+    setMutedTracks(preset.mutedTracks || sounds.map(() => false)); // fallback for old saves
+  };
 
-  setPresetName("");
-};
+  const deletePreset = (index) => {
+    const updated = presets.filter((_, i) => i !== index);
+    setPresets(updated);
+    localStorage.setItem("beatforge-presets", JSON.stringify(updated));
+  };
 
-const loadPreset = (preset) => {
-  if (!preset) return;
+  const fillSteps = (rowIndex, interval, startStep) => {
+    setGrid(prev => {
+      const updated = [...prev];
+      updated[rowIndex] = updated[rowIndex].map((_, i) => i >= startStep && (i - startStep) % interval === 0);
+      return updated;
+    });
+  };
 
-  setBpm(preset.bpm);
-  setStepsCount(preset.stepsCount);
-  setGrid(preset.grid);
-  setVolumes(preset.volumes);
-  setMutedTracks(preset.mutedTracks);
-};
+  const clearTrack = (rowIndex) => {
+    setGrid(prev => {
+      const updated = [...prev];
+      updated[rowIndex] = updated[rowIndex].map(() => false);
+      return updated;
+    });
+  };
 
-
-const deletePreset = (index) => {
-  const confirmDelete = window.confirm(
-    "Delete this preset?"
-  );
-  if (!confirmDelete) return;
-
-  const updated = presets.filter(
-    (_, i) => i !== index
-  );
-  setPresets(updated);
-  localStorage.setItem(
-    "beatforge-presets",
-    JSON.stringify(updated)
-  );
-};
-
-/* ===========================
-      FILL STEPS FUNCTION
-  ============================ */
-
+  // Close context menu if you click anywhere else
   useEffect(() => {
-  const closeMenu = () => {
-    setContextMenu(prev => ({ ...prev, visible: false }));
-  };
+    const handleClickOutside = () => setContextMenu(prev => ({ ...prev, visible: false }));
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
 
-  if (contextMenu.visible) {
-    window.addEventListener("click", closeMenu);
-  }
-
-  return () => {
-    window.removeEventListener("click", closeMenu);
-  };
-}, [contextMenu.visible]);
-
-const fillSteps = (rowIndex, interval, startStep) => {
-  setGrid(prev => {
-    const updated = [...prev];
-    updated[rowIndex] = updated[rowIndex].map((_, i) =>
-      i >= startStep && (i - startStep) % interval === 0
-    );
-    return updated;
-  });
-};
-
-const clearTrack = (rowIndex) => {
-  setGrid(prev => {
-    const updated = [...prev];
-    updated[rowIndex] = updated[rowIndex].map(() => false);
-    return updated;
-  });
-};
-
-
-
-  /* ===========================
-     RENDER
-  ============================ */
   return (
-    <div
-      className="sequencer"
-      onContextMenu={(e) => e.preventDefault()}
-    >
+    <div className="sequencer" onContextMenu={(e) => e.preventDefault()}>
 
+      {/* 🎛️ COMPACT MASTER CONTROL STRIP */}
       <div className="preset-bar">
-        <input
-          type="text"
-          placeholder="Preset name"
-          value={presetName}
-          onChange={(e) => setPresetName(e.target.value)}
-          className="preset-input"
-        />
-
-        <button onClick={savePreset} className="preset-btn">
-          Save
-        </button>
-
-        <select
-          className="preset-select"
-          onChange={(e) => {
-            const index = e.target.value;
-            if (index === "") return;
-            loadPreset(presets[index]);
-          }}
-        >
-          <option value="">Load preset</option>
-          {presets.map((p, i) => (
-            <option key={i} value={i}>
-              {p.name} •{" "}
-              {new Date(p.createdAt).toLocaleDateString()}
-            </option>
-          ))}
-        </select>
-
-        <button
-          className="preset-btn"
-          onClick={() => {
-            const index =
-              document.querySelector(".preset-select")
-                .value;
-            if (index !== "") {
-              deletePreset(Number(index));
-            }
-          }}
-        >
-         Delete
-        </button>
-
-      </div>
-
-
-      {/* TRANSPORT BAR */}
-      <div className="transport-bar">
-        <div className="transport-left">
-          <button
-            onClick={() => {
-                preloadSounds();
-                start();
-            }}
-            >▶
-          </button>
-          <button onClick={stop}>⏹</button>
-          <button onClick={clearBeat}>X</button>
+        
+        {/* LEFT: WORKSPACE TITLE */}
+        <div className="sequencer-header">
+          <div className="header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="9" y1="21" x2="9" y2="9"></line>
+            </svg>
+          </div>
+          <h2 className="workspace-title">Step Sequencer</h2>
+          <div className="status-dot"></div>
         </div>
 
-        <div className="transport-right">
-          <div className="bpm-control">
-            <Knob
-            label="BPM"
-            value={bpm}
-            min={60}
-            max={300}
-            step={1}
-            onChange={setBpm}
-            />
-          </div>
-          <div className="bpm-control">
-            <Knob
-              label="STEPS"
-              value={stepsCount}
-              min={8}
-              max={32}
-              step={1}
-              onChange={(v) => {
-                const safeValue = Math.min(32, Math.max(8, v));
-                setStepsCount(safeValue);
-              }}
-            />
-          </div>
-          <div className="bpm-control">
-            <Knob
-            label="MASTER"
-            value={Math.round(masterVolume * 100)}
-            min={0}
-            max={100}
-            step={1}
-            onChange={(v) => setMasterVolume(v / 100)}
-            />
+        {/* CENTER: PRESET MANAGEMENT */}
+        <div className="hardware-panel">
+          <div className="panel-label">PRESET LIBRARY</div>
+          <div className="panel-controls">
+            <input type="text" placeholder="NAME..." value={presetName} onChange={(e) => setPresetName(e.target.value)} className="led-input" />
+            
+            <button onClick={savePreset} className="panel-btn action-btn" title="Save Preset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              Save
+            </button>
+
+            <div className="panel-divider"></div>
+
+            <select className="led-select" onChange={(e) => { const index = e.target.value; if (index !== "") loadPreset(presets[index]); }}>
+              <option value="">Load preset...</option>
+              {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
+            </select>
+
+            <button className="panel-btn danger-icon-btn" title="Delete Preset" onClick={() => { const selectEl = document.querySelector(".led-select"); if (selectEl && selectEl.value !== "") deletePreset(Number(selectEl.value)); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
           </div>
         </div>
+
+        {/* RIGHT: GRID TOOLS */}
+        <div className="hardware-panel">
+          <div className="panel-label">GRID</div>
+          <div className="panel-controls grid-tools-group">
+            
+            <Knob 
+              label="STEPS" 
+              value={stepsCount} 
+              min={8} max={32} step={1} 
+              onChange={setStepsCount} 
+            />
+            
+            <div className="panel-divider"></div>
+
+            {/* The New Hardware Trigger Pad for Clear */}
+            <div className="trigger-pad-wrapper">
+              <div className="knob-label" style={{ color: '#ff4757' }}>CLEAR</div>
+              
+              <button onClick={clearBeat} className="trigger-pad" title="Clear Grid">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18"></path>
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                </svg>
+              </button>
+
+              <div className="pad-spacer"></div>
+            </div>
+
+          </div>
+        </div>
+
       </div>
 
       {/* SEQUENCER GRID */}
-{sounds.map((sound, rowIndex) => (
-  <div
-    key={sound.name}
-    className={`sequencer-row ${
-      mutedTracks[rowIndex] ? "muted" : ""
-    }`}
-  >
-    {/* COLUMN 1 — TRACK LABEL + MUTE */}
-    <div className="track-label">
-      <span className="track-name">{sound.name}</span>
-
-      <div className="track-controls">
-        <button
-          className={`mute-btn ${
-            mutedTracks[rowIndex] ? "active" : ""
-          }`}
-          onClick={() => {
-            setMutedTracks(prev => {
-              const copy = [...prev];
-              copy[rowIndex] = !copy[rowIndex];
-              return copy;
-            });
-          }}
-        >
-          M
-        </button>
-      </div>
-    </div>
-    
-
-    {/* COLUMN 2 — VOLUME */}
-    <div className="track-volume">
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value={volumes[rowIndex]}
-        className="volume-slider"
-        onChange={(e) => {
-          const copy = [...volumes];
-          copy[rowIndex] = Number(e.target.value);
-          setVolumes(copy);
-        }}
-      />
-    </div>
-
-    {/* COLUMN 3 — STEPS */}
-    <div
-      className="steps"
-      onMouseUp={() => (dragMode.current = null)}
-      onMouseLeave={() => (dragMode.current = null)}
-    >
-      {grid[rowIndex].map((active, stepIndex) => {
-        const isAltGroup =
-          Math.floor(stepIndex / 4) % 2 === 1;
-
-        return (
-          <div
-            className={`step
-              ${active ? "active" : ""}
-              ${currentStep === stepIndex ? "current" : ""}
-              ${isAltGroup ? "alt-group" : ""}
-            `}
-            onMouseDown={(e) => {
-              // 1. Reset the dragging flag every time we click down
-              isDraggingRef.current = false; 
+      {sounds.map((sound, rowIndex) => (
+        <div key={sound.name} className={`sequencer-row ${mutedTracks[rowIndex] ? "muted" : ""}`}>
+          
+          {/* 1. LEFT CONTROLS (Name, Mute, Options) */}
+          <div className="track-label">
+            <span className="track-name">{sound.name}</span>
+            <div className="track-controls">
               
-              if (e.button === 2) {
-                dragMode.current = "erase";
-                updateStep(rowIndex, stepIndex, false);
-              } else {
-                dragMode.current = "paint";
-                updateStep(rowIndex, stepIndex, true);
-              }
-            }}
-            onMouseEnter={() => {
-              if (!dragMode.current) return;
+              <button 
+                className={`mute-btn ${mutedTracks[rowIndex] ? "active" : ""}`} 
+                onClick={() => {
+                  setMutedTracks(prev => { 
+                    const copy = [...prev]; 
+                    copy[rowIndex] = !copy[rowIndex]; 
+                    return copy; 
+                  });
+                }}
+              >M</button>
               
-              // 2. If we enter a new step while dragMode is active, we are officially dragging
-              isDraggingRef.current = true; 
-              
-              updateStep(
-                rowIndex,
-                stepIndex,
-                dragMode.current === "paint"
+              <button 
+                className="track-options-btn" 
+                onClick={(e) => {
+                  e.preventDefault(); 
+                  e.stopPropagation();
+                  setContextMenu({
+                    visible: true,
+                    x: e.clientX,
+                    y: e.clientY,
+                    rowIndex: rowIndex, // Fixed! Now passes rowIndex properly to context menu
+                    startStep: 0
+                  });
+                }}
+                title="Track Options"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="1"></circle>
+                  <circle cx="12" cy="5" r="1"></circle>
+                  <circle cx="12" cy="19" r="1"></circle>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. CENTER GRID (The Steps) */}
+          <div className="steps" onMouseUp={() => (dragMode.current = null)} onMouseLeave={() => (dragMode.current = null)}>
+            {grid[rowIndex].map((active, stepIndex) => {
+              const isAltGroup = Math.floor(stepIndex / 4) % 2 === 1;
+              return (
+                <div key={stepIndex} className={`step ${active ? "active" : ""} ${currentStep === stepIndex ? "current" : ""} ${isAltGroup ? "alt-group" : ""}`}
+                  onMouseDown={(e) => {
+                    isDraggingRef.current = false; 
+                    if (e.button === 2) { dragMode.current = "erase"; updateStep(rowIndex, stepIndex, false); } 
+                    else { dragMode.current = "paint"; updateStep(rowIndex, stepIndex, true); }
+                  }}
+                  onMouseEnter={() => {
+                    if (!dragMode.current) return;
+                    isDraggingRef.current = true; 
+                    updateStep(rowIndex, stepIndex, dragMode.current === "paint");
+                  }}
+                  onContextMenu={(e) => e.preventDefault()}
+                />
               );
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              
-              // 3. Block the menu from opening if we were just dragging to erase
-              if (isDraggingRef.current) return; 
-              
-              setContextMenu({
-                visible: true,
-                x: e.clientX,
-                y: e.clientY,
-                rowIndex,
-                startStep: stepIndex
-              });
-            }}
-          />
-
-            );
             })}
-        </div>
-    </div>
-    ))}
-    {contextMenu.visible && (
-      <div
-        className="context-menu"
-        style={{
-          top: contextMenu.y,
-          left: contextMenu.x
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          className="context-item"
-          onClick={() =>
-            fillSteps(
-              contextMenu.rowIndex,
-              2,
-              contextMenu.startStep
-            )
-          }
-        >
-          Fill every 2 steps
-        </div>
+          </div>
 
-        <div
-          className="context-item"
-          onClick={() =>
-            fillSteps(
-              contextMenu.rowIndex,
-              4,
-              contextMenu.startStep
-            )
-          }
-        >
-          Fill every 4 steps
-        </div>
+          {/* 3. RIGHT CONTROLS (Volume Slider) */}
+          <div className="track-volume">
+            <input type="range" min="0" max="1" step="0.01" value={volumes[rowIndex]} className="volume-slider" onChange={(e) => {
+                const copy = [...volumes]; copy[rowIndex] = Number(e.target.value); setVolumes(copy);
+              }} />
+          </div>
 
-        <div
-          className="context-item"
-          onClick={() =>
-            fillSteps(
-              contextMenu.rowIndex,
-              8,
-              contextMenu.startStep
-            )
-          }
-        >
-          Fill every 8 steps
         </div>
+      ))}
 
-        <div className="context-divider" />
-
-        <div
-          className="context-item danger"
-          onClick={() => clearTrack(contextMenu.rowIndex)}
-        >
-          Clear track
+      {/* CONTEXT MENU COMPONENT */}
+      {contextMenu.visible && (
+        <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
+          <div className="context-item" onClick={() => { fillSteps(contextMenu.rowIndex, 2, contextMenu.startStep); setContextMenu({...contextMenu, visible: false}); }}>Fill every 2 steps</div>
+          <div className="context-item" onClick={() => { fillSteps(contextMenu.rowIndex, 4, contextMenu.startStep); setContextMenu({...contextMenu, visible: false}); }}>Fill every 4 steps</div>
+          <div className="context-item" onClick={() => { fillSteps(contextMenu.rowIndex, 8, contextMenu.startStep); setContextMenu({...contextMenu, visible: false}); }}>Fill every 8 steps</div>
+          <div className="context-divider" />
+          <div className="context-item danger" onClick={() => { clearTrack(contextMenu.rowIndex); setContextMenu({...contextMenu, visible: false}); }}>Clear track</div>
         </div>
-      </div>
-    )}
+      )}
 
     </div>
-    
   );
 }

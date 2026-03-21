@@ -1,17 +1,24 @@
 import React, { useState } from "react";
 import Auth from "./components/Auth";
-import Home from "./pages/Home";
+import Home from "./pages/Home"; // <-- Routed correctly to your pages directory!
 
 export default function App() {
-  // If true, the user sees the DAW. If false, they see the login screen.
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // This state controls which screen is visible
+  const [currentUser, setCurrentUser] = useState(null);
+
+  console.log("👑 App.js is running! Current Producer:", currentUser);
+
+  const handleLogout = () => {
+    localStorage.removeItem("beatforge_token");
+    setCurrentUser(null); 
+  };
 
   return (
     <>
-      {isAuthenticated ? (
-        <Home />
+      {currentUser ? (
+        <Home currentUser={currentUser} onLogout={handleLogout} />
       ) : (
-        <Auth onLogin={() => setIsAuthenticated(true)} />
+        <Auth onLogin={(user) => setCurrentUser(user)} />
       )}
     </>
   );

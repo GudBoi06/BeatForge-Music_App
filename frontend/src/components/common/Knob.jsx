@@ -1,142 +1,107 @@
-import React, { useRef, useState, useEffect } from "react";
-import "./knob.css";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import "../../styles/knob.css";
 
-export default function Knob({
-  value,
-  min,
-  max,
-  step = 1,
-  label,
-  onChange
-}) {
-  const startY = useRef(0);
-  const startValue = useRef(value);
+export default function Knob({ label, value, min, max, step = 1, onChange }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [startY, setStartY] = useState(0);
+  const [startVal, setStartVal] = useState(value);
+  const [inputValue, setInputValue] = useState(Math.round(value));
+  const wrapperRef = useRef(null);
 
-  const [localValue, setLocalValue] = useState(value);
+  // Sync the text input when the value changes externally (like dragging)
+  useEffect(() => {
+    setInputValue(Math.round(value));
+  }, [value]);
 
-useEffect(() => {
-  setLocalValue(value);
-}, [value]);
+  // Handle Mouse Wheel Scrolling
+  useEffect(() => {
+    const handleWheel = (e) => {
+      e.preventDefault(); // Stop the whole page from scrolling
+      const delta = e.deltaY < 0 ? step : -step;
+      let newVal = Math.max(min, Math.min(max, value + delta));
+      onChange(newVal);
+    };
 
+    const current = wrapperRef.current;
+    if (current) {
+      current.addEventListener("wheel", handleWheel, { passive: false });
+    }
+    return () => {
+      if (current) current.removeEventListener("wheel", handleWheel);
+    };
+  }, [value, min, max, step, onChange]);
 
-  const rotation =
-    ((value - min) / (max - min)) * 270 - 135;
-
-  const onMouseDown = (e) => {
-    startY.current = e.clientY;
-    startValue.current = value;
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+  // Handle Dragging
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setStartY(e.clientY);
+    setStartVal(value);
   };
 
-  const onMouseMove = (e) => {
-    const delta = startY.current - e.clientY;
+  const handleMouseMove = useCallback((e) => {
+    if (!isDragging) return;
+    const deltaY = startY - e.clientY; 
     const range = max - min;
-    const sensitivity = range / 180;
+    const valChange = (deltaY / 150) * range;
+    let newVal = startVal + valChange;
+    
+    newVal = Math.max(min, Math.min(max, newVal));
+    if (step) newVal = Math.round(newVal / step) * step;
+    
+    onChange(newVal);
+  }, [isDragging, startY, startVal, max, min, step, onChange]);
 
-    let newValue =
-      startValue.current + delta * sensitivity;
+  const handleMouseUp = useCallback(() => setIsDragging(false), []);
 
-    newValue =
-      Math.round(newValue / step) * step;
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    } else {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
-    newValue = Math.min(max, Math.max(min, newValue));
-
-    onChange(newValue);
+  // Handle Typing
+  const handleInputChange = (e) => setInputValue(e.target.value);
+  
+  const handleInputBlur = () => {
+    let newVal = Number(inputValue);
+    if (isNaN(newVal)) newVal = min;
+    newVal = Math.max(min, Math.min(max, newVal)); // Clamp it between min/max
+    onChange(newVal);
+    setInputValue(newVal); // Format back to standard number
   };
 
-  const onMouseUp = () => {
-    window.removeEventListener("mousemove", onMouseMove);
-    window.removeEventListener("mouseup", onMouseUp);
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleInputBlur();
   };
 
-  const onWheel = (e) => {
-  e.preventDefault();
-
-  const delta = e.deltaY < 0 ? step : -step;
-
-  let newValue = value + delta;
-  newValue = Math.min(max, Math.max(min, newValue));
-
-  onChange(newValue);
-};
-
+  const pct = (value - min) / (max - min);
+  const deg = -135 + (pct * 270);
 
   return (
-    <div className="knob-wrapper horizontal">
-    <svg
-        width="42"
-        height="42"
-        viewBox="0 0 100 100"
-        className="knob-svg"
-        onMouseDown={onMouseDown}
-        onWheel={onWheel}   /* 👈 ADD THIS */
-        >
-      <circle
-        cx="50"
-        cy="50"
-        r="42"
-        className="knob-bg"
-      />
-      <line
-        x1="50"
-        y1="50"
-        x2="50"
-        y2="16"
-        className="knob-indicator"
-        style={{
-          transform: `rotate(${rotation}deg)`,
-          transformOrigin: "50% 50%"
-        }}
-      />
-    </svg>
-
-    <div className="knob-info">
-      <input
-          type="number"
-          className="knob-input"
-          value={localValue}
-          min={min}
-          max={max}
-          step={step}
-          onChange={(e) => {
-            // Allow typing, but NOT empty
-            const val = e.target.value;
-
-            if (val === "") {
-              setLocalValue("");
-              return;
-            }
-
-            // Allow only numbers
-            if (!/^\d+$/.test(val)) return;
-
-            setLocalValue(val);
-          }}
-          onBlur={() => {
-            let v = Number(localValue);
-
-            // If empty or invalid → snap to min
-            if (!localValue || isNaN(v)) {
-              v = min;
-            }
-
-            // Clamp strictly
-            v = Math.min(max, Math.max(min, v));
-
-            setLocalValue(v);
-            onChange(v);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.target.blur();
-            }
-          }}
-        />
-
+    <div className="knob-wrapper" ref={wrapperRef}>
       <div className="knob-label">{label}</div>
+      <div className="knob-base" onMouseDown={handleMouseDown}>
+        <div className="knob-dial" style={{ transform: `rotate(${deg}deg)` }}>
+          <div className="knob-indicator"></div>
+        </div>
+      </div>
+      {/* Replaced static div with an interactive input box */}
+      <input 
+        type="number"
+        className="knob-input"
+        value={inputValue}
+        onChange={handleInputChange}
+        onBlur={handleInputBlur}
+        onKeyDown={handleKeyDown}
+      />
     </div>
-  </div>
   );
 }
