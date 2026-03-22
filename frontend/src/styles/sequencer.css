@@ -13,16 +13,17 @@
 /* WORKSPACE HEADER & MASTER STRIP */
 /* ===================== */
 .preset-bar {
-  display: flex;
-  justify-content: space-between; 
-  align-items: center; 
-  margin-bottom: 20px; 
-  padding-bottom: 16px; 
+  display: grid;
+  grid-template-columns: 1fr auto 1fr; /* 👈 THE SECRET TO GEOMETRIC PERFECTION */
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
-  gap: 15px;
+  width: 100%;
 }
 
 .sequencer-header {
+  justify-self: start; /* Locks Title to the absolute left */
   margin-bottom: 0; 
   display: flex;
   align-items: center;
@@ -92,6 +93,18 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.preset-panel {
+  justify-self: center; /* Locks Preset Library to the absolute dead-center */
+}
+
+.preset-panel .led-input {
+  width: 200px; 
+}
+
+.grid-panel {
+  justify-self: end; /* Locks Grid Tools to the absolute right */
 }
 
 .grid-tools-group {

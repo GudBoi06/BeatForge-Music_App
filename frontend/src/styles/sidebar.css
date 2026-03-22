@@ -1,54 +1,164 @@
+/* ===================== */
+/* SIDEBAR CONTAINER     */
+/* ===================== */
 .sidebar {
-  width: 220px;
+  width: 250px; /* Slightly wider to comfortably fit the nested menus */
+  min-width: 250px;
   background: var(--card-dark);
   height: 100vh;
   border-right: 1px solid var(--border-dark);
-  padding: 20px;
   display: flex;
   flex-direction: column;
+  color: var(--text-light);
+  overflow-y: auto;
+  z-index: 50;
 }
 
-.logo {
+/* ===================== */
+/* SIDEBAR HEADER & LOGO */
+/* ===================== */
+.sidebar-header {
+  padding: 30px 20px 20px 20px;
+}
+
+.brand-logo {
   color: var(--accent);
-  margin-bottom: 40px;
+  margin: 0;
   font-size: 24px;
   font-weight: 900;
   letter-spacing: 1px;
   text-transform: uppercase;
-  text-shadow: 0 0 15px rgba(165, 28, 245, 0.5); /* Neon glow on the logo */
+  text-shadow: 0 0 15px rgba(165, 28, 245, 0.5); /* Your Neon glow */
 }
 
-.menu-item {
-  margin: 10px 0;
+/* ===================== */
+/* NAVIGATION MENU       */
+/* ===================== */
+.sidebar-nav {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Replaces your old .menu-item */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0;
   padding: 12px 16px;
   color: var(--text-muted);
   font-weight: 500;
   cursor: pointer;
   border-radius: 8px;
-  border-left: 3px solid transparent; /* Placeholder for the active indicator */
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 3px solid transparent; 
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* Your custom smooth timing */
+  font-size: 0.95rem;
 }
 
-/* Smooth sliding open/close transition on hover */
-.menu-item:hover {
+.nav-item svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Your smooth sliding open/close transition on hover */
+.nav-item:hover {
   color: var(--text-light);
   background: rgba(255, 255, 255, 0.03);
   transform: translateX(6px); 
 }
 
-/* Pulse glow for active sections */
-.menu-item.active {
+/* Keep the layout from breaking when the chevron translates */
+.nav-item.has-child {
+  justify-content: space-between;
+}
+
+.nav-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Your Pulse glow for active sections */
+.nav-item.active {
   color: var(--accent);
-  background: rgba(165, 28, 245, 0.08); /* Faint purple background */
+  background: rgba(165, 28, 245, 0.08);
   border-left: 3px solid var(--accent);
   animation: pulse-glow 2.5s infinite alternate;
 }
 
 @keyframes pulse-glow {
-  0% {
-    box-shadow: inset 0 0 0px rgba(165, 28, 245, 0);
-  }
-  100% {
-    box-shadow: inset 20px 0 25px -20px var(--accent);
-  }
+  0% { box-shadow: inset 0 0 0px rgba(165, 28, 245, 0); }
+  100% { box-shadow: inset 20px 0 25px -20px var(--accent); }
+}
+
+/* Dividers */
+.nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 12px 0;
+}
+
+/* ===================== */
+/* NESTED SUB-MENUS      */
+/* ===================== */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.chevron {
+  font-size: 12px;
+  transition: transform 0.3s ease;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.sub-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 38px; /* Indents them precisely under the parent icon */
+  margin-top: 4px;
+  margin-bottom: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1); 
+  margin-left: 24px;
+}
+
+.sub-item {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 2px solid transparent;
+}
+
+/* Mini slide effect for the sub-items to match the parent! */
+.sub-item:hover {
+  color: var(--text-light);
+  background: rgba(255, 255, 255, 0.03);
+  transform: translateX(4px); 
+}
+
+.sub-item.active {
+  color: var(--accent);
+  font-weight: 600;
+  border-left: 2px solid var(--accent);
+  background: rgba(165, 28, 245, 0.05);
+}
+
+.sub-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sub-item.disabled:hover {
+  transform: none;
+  background: transparent;
+  color: var(--text-muted);
 }
