@@ -4,6 +4,8 @@ import Auth from "./components/Auth";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import StepSequencer from "./components/StepSequencer";
+import MelodyMatrix from "./components/MelodyMatrix";
+import LivePad from "./components/LivePad"; 
 import "./App.css";
 
 export default function App() {
@@ -17,12 +19,13 @@ export default function App() {
   const getInitialStudioView = () => {
     const hash = window.location.hash.replace('#', '');
     if (hash.includes('/beatmaker')) return 'beatmaker';
+    if (hash.includes('/livepad')) return 'livepad'; 
     return 'sequencer'; 
   };
 
   const [currentView, setCurrentView] = useState(getInitialView());
   const [activeStudioView, setActiveStudioView] = useState(getInitialStudioView());
-  // 🧠 Initialize user from Local Storage so it survives page reloads!
+  
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem("beatforge_user");
     return savedUser ? JSON.parse(savedUser) : null;
@@ -31,13 +34,29 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [masterVolume, setMasterVolume] = useState(0.8);
-  
-  // 🛑 NEW: Track if the user has actually drawn a beat
+  const [stepsCount, setStepsCount] = useState(16);
+  const [mySamples, setMySamples] = useState([]);
   const [hasActiveBeat, setHasActiveBeat] = useState(false);
+
+  const [projectPatterns, setProjectPatterns] = useState([]);
+  const [playbackStartTime, setPlaybackStartTime] = useState(0);
 
   useEffect(() => {
     if (currentView === "auth") setIsPlaying(false);
   }, [currentView]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      setPlaybackStartTime(Date.now());
+    }
+  }, [isPlaying]);
+
+  // 🛑 THE FIX FOR YOUR WARNING: Move the logic inside the block!
+  useEffect(() => {
+    if (activeStudioView === 'livepad') {
+      setIsPlaying(false);
+    }
+  }, [activeStudioView]);
 
   useEffect(() => {
     let newHash = currentView;
@@ -52,7 +71,13 @@ export default function App() {
       const hash = window.location.hash.replace('#', '');
       if (hash.startsWith('studio')) {
         setCurrentView('studio');
-        setActiveStudioView(hash.includes('/beatmaker') ? 'beatmaker' : 'sequencer');
+        if (hash.includes('/livepad')) { 
+          setActiveStudioView('livepad');
+        } else if (hash.includes('/beatmaker')) {
+          setActiveStudioView('beatmaker');
+        } else {
+          setActiveStudioView('sequencer');
+        }
       } else if (hash === 'auth') {
         setCurrentView('auth');
       } else {
@@ -71,17 +96,19 @@ export default function App() {
   }, [currentView]);
 
   const handleLogin = (userData) => {
-    localStorage.setItem("beatforge_user", JSON.stringify(userData)); // 👈 NEW
+    localStorage.setItem("beatforge_user", JSON.stringify(userData)); 
     setUser(userData);
     setCurrentView("studio"); 
   };
 
   const handleLogout = () => {
     localStorage.removeItem("beatforge_token"); 
-    localStorage.removeItem("beatforge_user"); // 👈 NEW
+    localStorage.removeItem("beatforge_user"); 
     setUser(null);                              
     setIsPlaying(false); 
     setHasActiveBeat(false); 
+    setMySamples([]); 
+    setProjectPatterns([]); 
     setCurrentView("landing");                  
   };
 
@@ -90,7 +117,6 @@ export default function App() {
   return (
     <div className="app-container">
       
-      {/* 🎧 FLOATING PLAYER: Now requires login AND an active beat! */}
       {currentView === "landing" && isLoggedIn && hasActiveBeat && (
         <div className="floating-mini-player">
           <div className="mini-player-info">
@@ -102,7 +128,6 @@ export default function App() {
           <button 
             className={`mini-play-btn ${isPlaying ? 'playing' : ''}`}
             onClick={() => setIsPlaying(!isPlaying)}
-            title={isPlaying ? "Pause Beat" : "Play Beat"}
           >
             {isPlaying ? "⏸" : "▶"}
           </button>
@@ -110,45 +135,25 @@ export default function App() {
       )}
 
       {currentView === "landing" && (
-        <Landing 
-          onLaunch={() => setCurrentView(isLoggedIn ? "studio" : "auth")} 
-          isLoggedIn={isLoggedIn} 
-        />
+        <Landing onLaunch={() => setCurrentView(isLoggedIn ? "studio" : "auth")} isLoggedIn={isLoggedIn} />
       )}
 
       {currentView === "auth" && (
-        <Auth 
-          onLogin={handleLogin} 
-          onBack={() => setCurrentView("landing")} 
-        />
+        <Auth onLogin={handleLogin} onBack={() => setCurrentView("landing")} />
       )}
 
       <div 
         className="studio-master-container"
-        style={{ 
-          display: currentView === "studio" ? "flex" : "none", 
-          flexDirection: "column", 
-          height: "100vh",
-          width: "100vw"
-        }}
+        style={{ display: currentView === "studio" ? "flex" : "none", flexDirection: "column", height: "100vh", width: "100vw" }}
       >
         <TopBar 
-          isPlaying={isPlaying} 
-          setIsPlaying={setIsPlaying}
-          bpm={bpm}
-          setBpm={setBpm}
-          masterVolume={masterVolume}
-          setMasterVolume={setMasterVolume}
-          onLogout={handleLogout} 
-          currentUser={user}
+          isPlaying={isPlaying} setIsPlaying={setIsPlaying} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} setMasterVolume={setMasterVolume} onLogout={handleLogout} currentUser={user} stepsCount={stepsCount} 
         />
         
         <div className="main-workspace" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           
           <Sidebar 
-            setCurrentView={setCurrentView} 
-            activeStudioView={activeStudioView}
-            setActiveStudioView={setActiveStudioView}
+            setCurrentView={setCurrentView} activeStudioView={activeStudioView} setActiveStudioView={setActiveStudioView} mySamples={mySamples} setMySamples={setMySamples} currentUser={user}          
           />
           
           <div className="sequencer-wrapper" style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
@@ -156,22 +161,34 @@ export default function App() {
             <div style={{ display: activeStudioView === "sequencer" ? "block" : "none" }}>
               <StepSequencer 
                 isPlaying={isPlaying} 
-                bpm={bpm} 
-                setBpm={setBpm}
-                masterVolume={masterVolume} 
-                currentUser={user} /* 🛑 Pass user down for presets */
-                setHasActiveBeat={setHasActiveBeat} /* 🛑 Pass tracker down */
+                activeStudioView={activeStudioView}
+                playbackStartTime={playbackStartTime} 
+                bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} currentUser={user} setHasActiveBeat={setHasActiveBeat} stepsCount={stepsCount} setStepsCount={setStepsCount} mySamples={mySamples} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns}
               />
             </div>
 
-            <div style={{ display: activeStudioView === "beatmaker" ? "flex" : "none", justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-muted)' }}>
-              <h2>Beat Maker Workspace (Coming Soon)</h2>
+            <div style={{ display: activeStudioView === "beatmaker" ? "block" : "none", height: '100%' }}>
+              <MelodyMatrix 
+                isPlaying={isPlaying} 
+                activeStudioView={activeStudioView}
+                playbackStartTime={playbackStartTime} 
+                bpm={bpm} stepsCount={stepsCount} setHasActiveBeat={setHasActiveBeat} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns}
+              />
+            </div>
+
+            <div style={{ display: activeStudioView === "livepad" ? "block" : "none", height: '100%' }}>
+              <LivePad 
+                projectPatterns={projectPatterns} 
+                isPlaying={isPlaying} 
+                activeStudioView={activeStudioView}
+                bpm={bpm} 
+                playbackStartTime={playbackStartTime}
+              />
             </div>
 
           </div>
         </div>
       </div>
-
     </div>
   );
 }

@@ -1,104 +1,182 @@
-import React, { useState } from "react";
+import React, { useRef, useEffect } from "react";
 import "../styles/sidebar.css";
 
-// 👇 Receive the new props from App.jsx
-export default function Sidebar({ setCurrentView, activeStudioView, setActiveStudioView }) {
-  const [openMenus, setOpenMenus] = useState({
-    studio: true,  
-    library: false
-  });
+export default function Sidebar({ setCurrentView, activeStudioView, setActiveStudioView, mySamples, setMySamples, currentUser }) {
+  
+  const audioPreviewRef = useRef(new Audio());
+  const fileInputRef = useRef(null);
 
-  const toggleMenu = (menu) => {
-    setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
+  // 🌩️ PULL SAMPLES FROM MONGODB ON LOGIN
+  useEffect(() => {
+    if (!currentUser) {
+      setMySamples([]); // Wipe if logged out
+      return;
+    }
+
+    const fetchCloudSamples = async () => {
+      try {
+        const token = localStorage.getItem("beatforge_token");
+        const res = await fetch("http://localhost:5000/api/samples", {
+          headers: { "x-auth-token": token }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setMySamples(data);
+        }
+      } catch (error) {
+        console.error("Failed to load cloud samples:", error);
+      }
+    };
+
+    fetchCloudSamples();
+  }, [currentUser, setMySamples]);
+
+
+  // 🚀 UPLOAD ACTUAL FILE TO NODE.JS BACKEND
+  const handleSampleUpload = async (e) => {
+    if (!currentUser) {
+      alert("You must be logged in to upload custom samples.");
+      e.target.value = null; 
+      return;
+    }
+
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const cleanName = file.name.replace(/\.[^/.]+$/, "");
+
+    // 📦 Package the file into a special FormData object for transmission
+    const formData = new FormData();
+    formData.append("audio", file);
+    formData.append("name", cleanName);
+
+    try {
+      const token = localStorage.getItem("beatforge_token");
+      
+      // 📡 Send it to the Multer route we just built!
+      const res = await fetch("http://localhost:5000/api/samples", {
+        method: "POST",
+        headers: { "x-auth-token": token }, // NO Content-Type header! The browser sets it automatically for FormData
+        body: formData
+      });
+
+      if (res.ok) {
+        const savedSample = await res.json();
+        // Add the permanent server URL to our Sidebar list
+        setMySamples((prev) => [savedSample, ...prev]);
+      } else {
+        alert("Upload failed. Make sure your backend server is running!");
+      }
+    } catch (error) {
+      console.error("Error uploading sample:", error);
+    }
+
+    e.target.value = null; 
+  };
+
+  const playPreview = (fileUrl) => {
+    audioPreviewRef.current.src = fileUrl;
+    audioPreviewRef.current.currentTime = 0;
+    audioPreviewRef.current.play().catch(err => console.log("Preview blocked:", err));
+  };
+
+  const deleteSample = (id, e) => {
+    e.stopPropagation(); 
+    // In the future, you can add a fetch() here to delete the file from the /uploads folder too!
+    setMySamples((prev) => prev.filter(sample => sample.id !== id));
   };
 
   return (
     <div className="sidebar">
+      
+      {/* HEADER */}
       <div className="sidebar-header">
-        <h2 
-          className="brand-logo" 
-          onClick={() => setCurrentView('landing')} // Routes to landing page
-          style={{ cursor: 'pointer' }}             // Makes it look clickable
-        >
+        <h2 className="brand-logo" onClick={() => setCurrentView('landing')} style={{ cursor: 'pointer' }}>
           BEATFORGE
         </h2>
       </div>
 
+      {/* NAVIGATION TABS */}
       <div className="sidebar-nav">
+        <div className="browser-title" style={{ marginBottom: '8px', paddingLeft: '4px' }}>WORKSPACE</div>
         
-        {/* 🏠 HOME: Routes entirely out of the studio back to Landing */}
         <div 
-          className="nav-item" 
-          onClick={() => setCurrentView('landing')}
+          className={`nav-item ${activeStudioView === 'sequencer' ? 'active' : ''}`}
+          onClick={() => setActiveStudioView('sequencer')}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2-2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          <span>Home</span>
-        </div>
-
-        <div className="nav-divider"></div>
-
-        {/* 🎛️ STUDIO */}
-        <div className="nav-group">
-          <div className="nav-item has-child" onClick={() => toggleMenu('studio')}>
-            <div className="nav-item-left">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-              <span>Studio</span>
-            </div>
-            <span className={`chevron ${openMenus.studio ? 'open' : ''}`}>▾</span>
+          <div className="nav-item-left">
+            <span>🥁</span> Step Sequencer
           </div>
-          
-          {openMenus.studio && (
-            <div className="sub-menu">
-              
-              {/* Sets the active studio view to the Step Sequencer */}
-              <div 
-                className={`sub-item ${activeStudioView === 'sequencer' ? 'active' : ''}`} 
-                onClick={() => setActiveStudioView('sequencer')}
-              >
-                Step Sequencer
-              </div>
-              
-              {/* Sets the active studio view to the Beat Maker */}
-              <div 
-                className={`sub-item ${activeStudioView === 'beatmaker' ? 'active' : ''}`} 
-                onClick={() => setActiveStudioView('beatmaker')}
-              >
-                Beat Maker
-              </div>
-              
-              <div className="sub-item disabled">Mixer Console</div>
-            </div>
-          )}
         </div>
-
-        {/* 📂 LIBRARY */}
-        <div className="nav-group">
-          <div className="nav-item has-child" onClick={() => toggleMenu('library')}>
-            <div className="nav-item-left">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-              <span>Library</span>
-            </div>
-            <span className={`chevron ${openMenus.library ? 'open' : ''}`}>▾</span>
+        
+        <div 
+          className={`nav-item ${activeStudioView === 'beatmaker' ? 'active' : ''}`}
+          onClick={() => setActiveStudioView('beatmaker')}
+        >
+          <div className="nav-item-left">
+            <span>🎹</span> Piano Roll
           </div>
-          
-          {openMenus.library && (
-            <div className="sub-menu">
-              <div className="sub-item">My Samples</div>
-              <div className="sub-item">My Presets</div>
-              <div className="sub-item">Cloud Kits</div>
-            </div>
-          )}
         </div>
 
-        <div className="nav-divider"></div>
-
-        {/* ⚙️ SETTINGS */}
-        <div className="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <span>Settings</span>
+        {/* 🎛️ THE NEW LIVE PAD BUTTON */}
+        <div 
+          className={`nav-item ${activeStudioView === 'livepad' ? 'active' : ''}`}
+          onClick={() => setActiveStudioView('livepad')}
+        >
+          <div className="nav-item-left">
+            <span>🎛️</span> Live Pad
+          </div>
         </div>
-
       </div>
+
+      {/* 📂 THE BROWSER (MY SAMPLES) */}
+      <div className="sidebar-browser">
+        <div className="browser-header">
+          <div className="browser-title">MY SAMPLES</div>
+          
+          <button className="upload-btn" onClick={() => fileInputRef.current.click()} title="Upload Sample">
+            +
+          </button>
+          <input 
+            type="file" 
+            accept="audio/*" 
+            ref={fileInputRef} 
+            style={{ display: 'none' }} 
+            onChange={handleSampleUpload} 
+          />
+        </div>
+
+        {/* Sample List */}
+        <div className="sample-list">
+          {mySamples.length === 0 ? (
+            <div className="empty-browser">
+              No custom samples yet.<br/>Click '+' to upload .wav/.mp3
+            </div>
+          ) : (
+            mySamples.map((sample) => (
+              <div 
+                key={sample.id} 
+                className="sample-item"
+                onClick={() => playPreview(sample.file)}
+              >
+                <span className="sample-name" title={sample.name}>
+                  🎵 {sample.name}
+                </span>
+                
+                <button 
+                  className="delete-btn"
+                  onClick={(e) => deleteSample(sample.id, e)}
+                  title="Delete Sample"
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      
     </div>
   );
 }

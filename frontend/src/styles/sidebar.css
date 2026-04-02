@@ -2,15 +2,15 @@
 /* SIDEBAR CONTAINER     */
 /* ===================== */
 .sidebar {
-  width: 250px; /* Slightly wider to comfortably fit the nested menus */
+  width: 250px; 
   min-width: 250px;
-  background: var(--card-dark);
+  background: var(--card-dark, #0f0f13);
   height: 100vh;
-  border-right: 1px solid var(--border-dark);
+  border-right: 1px solid var(--border-dark, #1f1f23);
   display: flex;
   flex-direction: column;
-  color: var(--text-light);
-  overflow-y: auto;
+  color: var(--text-light, #fff);
+  overflow-y: hidden; /* Prevent full sidebar scroll, let inner elements scroll */
   z-index: 50;
 }
 
@@ -22,13 +22,18 @@
 }
 
 .brand-logo {
-  color: var(--accent);
+  color: var(--accent, #a64aff);
   margin: 0;
   font-size: 24px;
   font-weight: 900;
   letter-spacing: 1px;
   text-transform: uppercase;
-  text-shadow: 0 0 15px rgba(165, 28, 245, 0.5); /* Your Neon glow */
+  text-shadow: 0 0 15px rgba(165, 28, 245, 0.5); /* Neon glow */
+  transition: text-shadow 0.3s ease;
+}
+
+.brand-logo:hover {
+  text-shadow: 0 0 25px rgba(165, 28, 245, 0.8);
 }
 
 /* ===================== */
@@ -41,19 +46,18 @@
   gap: 4px;
 }
 
-/* Replaces your old .menu-item */
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
   margin: 4px 0;
   padding: 12px 16px;
-  color: var(--text-muted);
+  color: var(--text-muted, #888);
   font-weight: 500;
   cursor: pointer;
   border-radius: 8px;
   border-left: 3px solid transparent; 
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* Your custom smooth timing */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* Smooth timing */
   font-size: 0.95rem;
 }
 
@@ -62,14 +66,13 @@
   height: 18px;
 }
 
-/* Your smooth sliding open/close transition on hover */
+/* Smooth sliding open/close transition on hover */
 .nav-item:hover {
-  color: var(--text-light);
+  color: var(--text-light, #fff);
   background: rgba(255, 255, 255, 0.03);
   transform: translateX(6px); 
 }
 
-/* Keep the layout from breaking when the chevron translates */
 .nav-item.has-child {
   justify-content: space-between;
 }
@@ -80,17 +83,17 @@
   gap: 12px;
 }
 
-/* Your Pulse glow for active sections */
+/* Pulse glow for active sections */
 .nav-item.active {
-  color: var(--accent);
+  color: var(--accent, #a64aff);
   background: rgba(165, 28, 245, 0.08);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--accent, #a64aff);
   animation: pulse-glow 2.5s infinite alternate;
 }
 
 @keyframes pulse-glow {
   0% { box-shadow: inset 0 0 0px rgba(165, 28, 245, 0); }
-  100% { box-shadow: inset 20px 0 25px -20px var(--accent); }
+  100% { box-shadow: inset 20px 0 25px -20px var(--accent, #a64aff); }
 }
 
 /* Dividers */
@@ -121,7 +124,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding-left: 38px; /* Indents them precisely under the parent icon */
+  padding-left: 38px; 
   margin-top: 4px;
   margin-bottom: 8px;
   border-left: 1px solid rgba(255, 255, 255, 0.1); 
@@ -132,23 +135,23 @@
   padding: 10px 12px;
   border-radius: 6px;
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--text-muted, #888);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border-left: 2px solid transparent;
 }
 
-/* Mini slide effect for the sub-items to match the parent! */
+/* Mini slide effect for the sub-items */
 .sub-item:hover {
-  color: var(--text-light);
+  color: var(--text-light, #fff);
   background: rgba(255, 255, 255, 0.03);
   transform: translateX(4px); 
 }
 
 .sub-item.active {
-  color: var(--accent);
+  color: var(--accent, #a64aff);
   font-weight: 600;
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--accent, #a64aff);
   background: rgba(165, 28, 245, 0.05);
 }
 
@@ -160,5 +163,149 @@
 .sub-item.disabled:hover {
   transform: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-muted, #888);
+}
+
+
+/* ===================== */
+/* MY SAMPLES BROWSER    */
+/* ===================== */
+.sidebar-browser {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  border-top: 1px solid var(--border-dark, #1f1f23);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-left: 4px;
+}
+
+.browser-title {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.upload-btn {
+  background: transparent;
+  border: 1px solid var(--text-muted, #888);
+  color: var(--text-light, #fff);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.upload-btn:hover {
+  border-color: var(--accent, #a64aff);
+  color: var(--accent, #a64aff);
+  box-shadow: 0 0 8px rgba(165, 28, 245, 0.3);
+  transform: scale(1.05);
+}
+
+.sample-list {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Custom Scrollbar for Sample List */
+.sample-list::-webkit-scrollbar {
+  width: 4px;
+}
+.sample-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sample-list::-webkit-scrollbar-thumb {
+  background: var(--border-dark, #1f1f23);
+  border-radius: 4px;
+}
+.sample-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted, #888);
+}
+
+.sample-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Matches your exact slide animation! */
+.sample-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid var(--accent, #a64aff);
+  transform: translateX(6px);
+}
+
+.sample-name {
+  color: var(--text-muted, #888);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sample-item:hover .sample-name {
+  color: var(--text-light, #fff);
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  color: #ff4757;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0; /* Hidden until hover */
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.sample-item:hover .delete-btn {
+  opacity: 0.6;
+}
+
+.delete-btn:hover {
+  opacity: 1 !important;
+  background: rgba(255, 71, 87, 0.15);
+}
+
+.empty-browser {
+  color: var(--text-muted, #888);
+  font-size: 12px;
+  text-align: center;
+  margin-top: 30px;
+  font-style: italic;
+  line-height: 1.6;
 }

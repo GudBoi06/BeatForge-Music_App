@@ -1,0 +1,71 @@
+.live-pad-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 20px;
+  background: #0a0a0c;
+  overflow: hidden;
+}
+
+.pad-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  border-bottom: 1px solid #222;
+  padding-bottom: 15px;
+}
+
+.pro-upgrade-btn {
+  background: linear-gradient(45deg, #FFD700, #FFA500);
+  color: #000;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(255, 165, 0, 0.4);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pro-upgrade-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 25px rgba(255, 165, 0, 0.6);
+}
+
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  flex: 1;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+  max-height: 800px;
+}
+
+.launch-pad {
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  outline: none;
+}
+
+.launch-pad:active {
+  transform: scale(0.95);
+}
+
+.pad-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
