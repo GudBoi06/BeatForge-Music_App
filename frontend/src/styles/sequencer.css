@@ -52,22 +52,6 @@
   margin: 0;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  background: #00e676;
-  border-radius: 50%;
-  box-shadow: 0 0 10px #00e676;
-  margin-left: 10px;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; box-shadow: 0 0 10px #00e676; }
-  50% { opacity: 0.5; box-shadow: 0 0 4px #00e676; }
-  100% { opacity: 1; box-shadow: 0 0 10px #00e676; }
-}
-
 /* ===================== */
 /* HARDWARE PANELS */
 /* ===================== */

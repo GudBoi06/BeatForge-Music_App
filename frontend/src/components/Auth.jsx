@@ -63,11 +63,12 @@ export default function Auth({ onLogin }) {
       // Save the JWT token so the user stays logged in across sessions
       localStorage.setItem("beatforge_token", data.token);
 
-      // Tell the main App that we are officially logged in
+      // 🌟 FIX: Tell the main App that we are officially logged in AND pass the isPro status!
       onLogin({ 
         _id: data._id, 
         username: data.username, 
-        email: data.email 
+        email: data.email,
+        isPro: data.isPro // <-- THIS is what fixes the logout bug!
       });
 
     } catch (error) {

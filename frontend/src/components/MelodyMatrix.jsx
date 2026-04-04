@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { audioCtx, masterGain } from "../utils/audioEngine"; 
 import "../styles/pianoroll.css"; 
 
 const ALL_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -10,7 +11,7 @@ const SCALES = {
   "Harmonic Minor": [0, 2, 3, 5, 7, 8, 11]
 };
 
-export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCount = 16, setHasActiveBeat, projectPatterns, setProjectPatterns }) {
+export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStartTime, bpm, stepsCount = 16, setHasActiveBeat, projectPatterns, setProjectPatterns, currentUser }) {
   const [rootNote, setRootNote] = useState(0); 
   const [scaleType, setScaleType] = useState("Minor");
   
@@ -23,19 +24,17 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
   const [notes, setNotes] = useState([]);
   const [currentTick, setCurrentTick] = useState(0); 
   
-  const audioCtxRef = useRef(null);
   const intervalRef = useRef(null);
   const dragMode = useRef(null);
   const dropdownRef = useRef(null);
 
-  // ⏱️ Absolute time trackers to prevent skipped notes
-  const startTimeRef = useRef(0);
+  const resizeNoteId = useRef(null);
+
   const lastPlayedTickRef = useRef(-1);
-
   const totalBeats = stepsCount / 4;
-
-  // 🎧 OVERLAPPING PLAYBACK
   const isCurrentlyPlaying = isPlaying && (activeStudioView === "beatmaker" || activeStudioView === "sequencer");
+
+  const [saveStatus, setSaveStatus] = useState("idle");
 
   const allGridNotes = useMemo(() => {
     const arr = [];
@@ -70,90 +69,102 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
         setIsSnapMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [dropdownRef]);
+    
+    const handleGlobalMouseUp = () => {
+      dragMode.current = null;
+      resizeNoteId.current = null;
+    };
 
-  useEffect(() => {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!audioCtxRef.current && AudioContext) audioCtxRef.current = new AudioContext();
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
   }, []);
 
   const playSynthNote = (freq, durationInSeconds) => {
-    if (!audioCtxRef.current) return;
-    if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
+    if (!audioCtx) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
 
-    const osc = audioCtxRef.current.createOscillator();
-    const gainNode = audioCtxRef.current.createGain();
-    const filter = audioCtxRef.current.createBiquadFilter();
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
 
     osc.type = "sawtooth"; 
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(2500, audioCtxRef.current.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(200, audioCtxRef.current.currentTime + (durationInSeconds * 0.9));
+    filter.frequency.setValueAtTime(2500, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + (durationInSeconds * 0.9));
 
-    osc.frequency.setValueAtTime(freq, audioCtxRef.current.currentTime);
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
 
-    gainNode.gain.setValueAtTime(0, audioCtxRef.current.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.3, audioCtxRef.current.currentTime + 0.02); 
-    gainNode.gain.setValueAtTime(0.3, audioCtxRef.current.currentTime + Math.max(0, durationInSeconds - 0.05)); 
-    gainNode.gain.linearRampToValueAtTime(0.001, audioCtxRef.current.currentTime + durationInSeconds); 
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.02); 
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + Math.max(0, durationInSeconds - 0.05)); 
+    gainNode.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + durationInSeconds); 
 
     osc.connect(filter);
     filter.connect(gainNode);
-    gainNode.connect(audioCtxRef.current.destination);
+    gainNode.connect(masterGain); 
 
     osc.start();
-    osc.stop(audioCtxRef.current.currentTime + durationInSeconds + 0.1);
+    osc.stop(audioCtx.currentTime + durationInSeconds + 0.1);
   };
 
-  // 🧠 BULLETPROOF ABSOLUTE TIME ENGINE
   useEffect(() => {
-    if (!isCurrentlyPlaying) {
-      clearInterval(intervalRef.current);
+    if (!isCurrentlyPlaying || !playbackStartTime) {
+      clearTimeout(intervalRef.current);
+      intervalRef.current = null;
       setCurrentTick(0);
       lastPlayedTickRef.current = -1;
       return;
     }
     
-    clearInterval(intervalRef.current);
-    startTimeRef.current = Date.now();
+    // 🌟 FIX 1: STALE CLOCK GUARD
+    // Prevents double-firing the first note if React hasn't updated the global clock yet
+    if (Date.now() - playbackStartTime > 500 && lastPlayedTickRef.current === -1) {
+      return; 
+    }
+
+    clearTimeout(intervalRef.current);
+    
+    if (audioCtx?.state === "suspended") {
+      audioCtx.resume();
+    }
     
     const TICKS_PER_BEAT = 48; 
     const tickDurationMs = (60000 / bpm) / TICKS_PER_BEAT; 
     const TOTAL_TICKS = totalBeats * TICKS_PER_BEAT; 
 
-    intervalRef.current = setInterval(() => {
-      // Calculate exactly where we are in real-world time
-      const elapsedMs = Date.now() - startTimeRef.current;
+    const scheduleNextTick = () => {
+      const elapsedMs = Date.now() - playbackStartTime;
       const absoluteTick = Math.floor(elapsedMs / tickDurationMs);
       const currentLoopTick = absoluteTick % TOTAL_TICKS;
 
-      // If we crossed a tick boundary, calculate all ticks we need to process
-      // This catches any notes that might have been skipped if the browser lagged
       if (currentLoopTick !== lastPlayedTickRef.current) {
-        let ticksToProcess = [];
+        const ticksToProcess = new Set();
         
         if (lastPlayedTickRef.current === -1) {
-          ticksToProcess.push(currentLoopTick);
+          for (let t = 0; t <= currentLoopTick; t++) {
+            ticksToProcess.add(t);
+          }
         } else if (currentLoopTick > lastPlayedTickRef.current) {
           for (let t = lastPlayedTickRef.current + 1; t <= currentLoopTick; t++) {
-            ticksToProcess.push(t);
+            ticksToProcess.add(t);
           }
         } else {
-          // Handle the loop wrapping around back to the beginning
           for (let t = lastPlayedTickRef.current + 1; t < TOTAL_TICKS; t++) {
-            ticksToProcess.push(t);
+            ticksToProcess.add(t);
           }
           for (let t = 0; t <= currentLoopTick; t++) {
-            ticksToProcess.push(t);
+            ticksToProcess.add(t);
           }
         }
 
-        // Check if any notes land on the exact ticks we just crossed
         notesRef.current.forEach(note => {
           const noteStartTick = Math.round(note.startBeat * TICKS_PER_BEAT);
-          if (ticksToProcess.includes(noteStartTick)) {
+          if (ticksToProcess.has(noteStartTick)) {
             const durationInSecs = (60 / bpm) * note.durationBeats;
             playSynthNote(scaleNotesRef.current[note.row].freq, durationInSecs);
           }
@@ -162,42 +173,59 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
         setCurrentTick(currentLoopTick);
         lastPlayedTickRef.current = currentLoopTick;
       }
-    }, 5); // Fast polling to keep the UI perfectly aligned
+
+      const nextAbsoluteTick = absoluteTick + 1;
+      const timeOfNextTick = playbackStartTime + (nextAbsoluteTick * tickDurationMs);
+      const timeUntilNext = Math.max(0, timeOfNextTick - Date.now());
+
+      intervalRef.current = setTimeout(scheduleNextTick, timeUntilNext);
+    };
+
+    scheduleNextTick();
     
-    return () => clearInterval(intervalRef.current);
+    return () => clearTimeout(intervalRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCurrentlyPlaying, bpm, totalBeats]); 
+  }, [isCurrentlyPlaying, playbackStartTime, bpm, totalBeats]); 
 
   const handleGridClick = (row, startBeat) => {
     if (setHasActiveBeat) setHasActiveBeat(true);
     
     const newEndBeat = startBeat + gridSnap;
-    const filteredNotes = notes.filter(n => {
-      if (n.row !== row) return true;
-      const nEnd = n.startBeat + n.durationBeats;
-      return !(startBeat < nEnd && newEndBeat > n.startBeat);
+    
+    // 🌟 FIX 2: FUNCTIONAL STATE UPDATE
+    // Prevents stacking duplicate notes on top of each other when sweeping the mouse quickly
+    setNotes(prevNotes => {
+      const filteredNotes = prevNotes.filter(n => {
+        if (n.row !== row) return true;
+        const nEnd = n.startBeat + n.durationBeats;
+        return !(startBeat < nEnd && newEndBeat > n.startBeat);
+      });
+
+      const newNote = {
+        id: Date.now() + Math.random(),
+        row: row,
+        startBeat: startBeat,
+        durationBeats: gridSnap
+      };
+
+      return [...filteredNotes, newNote];
     });
 
-    const newNote = {
-      id: Date.now() + Math.random(),
-      row: row,
-      startBeat: startBeat,
-      durationBeats: gridSnap
-    };
-
-    setNotes([...filteredNotes, newNote]);
     playSynthNote(allGridNotes[row].freq, (60 / bpm) * gridSnap);
   };
 
   const deleteNote = (noteId) => {
-    setNotes(prev => prev.filter(n => n.id !== noteId));
-    if (notes.length <= 1 && setHasActiveBeat) setHasActiveBeat(false);
+    setNotes(prev => {
+      const newNotes = prev.filter(n => n.id !== noteId);
+      if (newNotes.length === 0 && setHasActiveBeat) setHasActiveBeat(false);
+      return newNotes;
+    });
   };
 
   const autoGenerateMelody = () => {
     const generated = [];
-    
     const validRows = [];
+    
     allGridNotes.forEach((note, index) => {
       if (note.inScale) validRows.push(index);
     });
@@ -216,17 +244,15 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
     if (setHasActiveBeat) setHasActiveBeat(true);
   };
 
-  // 🛠️ THE FIX: Renamed from saveToArranger to saveToLivePad
   const saveToLivePad = () => {
     if (notes.length === 0) {
-      alert("Draw some notes on the grid before saving to the Live Pad!");
+      setSaveStatus("empty");
+      setTimeout(() => setSaveStatus("idle"), 2000);
       return;
     }
     
-    const defaultName = `Melody ${projectPatterns?.filter(p => p.type === 'melody').length + 1 || 1}`;
-    const patternName = prompt("Name your Melody Pattern:", defaultName);
-    
-    if (!patternName) return; 
+    const patternCount = (projectPatterns || []).filter(p => p.type === 'melody').length + 1;
+    const patternName = `Melody ${patternCount}`;
 
     const newPattern = {
       id: `melody-${Date.now()}`,
@@ -234,12 +260,37 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
       name: patternName,
       data: [...notes], 
       scale: scaleType,
-      root: rootNote
+      root: rootNote,
+      stepsCount: stepsCount 
     };
 
     if (setProjectPatterns) {
-      setProjectPatterns(prev => [...prev, newPattern]);
-      alert(`"${patternName}" saved! You can now play it in the Live Pad.`);
+      setProjectPatterns(prev => [...(prev || []), newPattern]);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    }
+  };
+
+  const handleGridMouseMove = (e) => {
+    if (dragMode.current === "resize" && resizeNoteId.current) {
+      const gridRect = e.currentTarget.getBoundingClientRect();
+      const x = Math.max(0, e.clientX - gridRect.left);
+      const beatAtMouse = (x / gridRect.width) * totalBeats;
+      const snappedBeat = Math.round(beatAtMouse / gridSnap) * gridSnap;
+
+      setNotes(prev => {
+        const noteIndex = prev.findIndex(n => n.id === resizeNoteId.current);
+        if (noteIndex === -1) return prev;
+        
+        const n = prev[noteIndex];
+        const newDuration = Math.max(gridSnap, snappedBeat - n.startBeat);
+        
+        if (Math.abs(n.durationBeats - newDuration) < 0.001) return prev;
+        
+        const copy = [...prev];
+        copy[noteIndex] = { ...n, durationBeats: newDuration };
+        return copy;
+      });
     }
   };
 
@@ -250,7 +301,7 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
     { label: "Beat", value: 1 },
     { label: "1/2 Beat", value: 0.5 },
     { label: "1/3 Beat", value: 1/3 },
-    { label: "Step (1/4 Beat)", value: 0.25 },
+    { label: "Step", value: 0.25 },
     { label: "1/2 Step", value: 0.125 },
     { label: "1/3 Step", value: 0.25 / 3 },
     { label: "1/4 Step", value: 0.0625 }
@@ -262,7 +313,6 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
       onContextMenu={(e) => e.preventDefault()}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}
     >
-      
       <style>{`
         .custom-zoom-slider { -webkit-appearance: none; width: 80px; background: transparent; }
         .custom-zoom-slider::-webkit-slider-runnable-track { height: 6px; background: #0a0a0c; border-radius: 3px; border: 1px solid #222; }
@@ -354,9 +404,20 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
 
         <div style={{ flex: 1 }}></div>
 
-        {/* 🛠️ THE FIX: Updated button onClick handler and text */}
-        <button onClick={saveToLivePad} className="panel-btn action-btn" style={{ fontWeight: 'bold', background: 'var(--accent)', color: '#fff', border: 'none' }}>
-          💾 TO LIVE PAD
+        <button 
+          onClick={saveToLivePad} 
+          className="panel-btn action-btn" 
+          style={{ 
+            fontWeight: 'bold', 
+            background: saveStatus === 'empty' ? '#ff4757' : (saveStatus === 'saved' ? '#00e676' : 'var(--accent)'), 
+            color: '#fff', 
+            border: 'none',
+            transition: 'all 0.2s',
+            width: '130px', 
+            justifyContent: 'center'
+          }}
+        >
+          {saveStatus === 'empty' ? '⚠️ EMPTY' : saveStatus === 'saved' ? '✔️ SAVED' : '💾 TO LIVE PAD'}
         </button>
 
         <button onClick={autoGenerateMelody} className="panel-btn action-btn" style={{ fontWeight: 'bold' }}>
@@ -382,7 +443,7 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
         }}
       >
         
-        <div className="keyboard" style={{ position: 'sticky', left: 0, width: '70px', minWidth: '70px', background: '#141418', borderRight: '1px solid #000', zIndex: 60 }}>
+        <div className="keyboard" style={{ position: 'sticky', left: 0, width: '70px', minWidth: '70px', background: '#141418', borderRight: '1px solid #000', zIndex: 60, minHeight: 'max-content' }}>
           {allGridNotes.map((note, i) => (
             <div 
               key={`key-${i}`} 
@@ -414,14 +475,16 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
             flexDirection: 'column', 
             position: 'relative', 
             minWidth: `${zoomLevel * 100}%`, 
-            flex: 1 
+            flex: 1,
+            minHeight: 'max-content',
+            userSelect: 'none'
           }} 
-          onMouseUp={() => (dragMode.current = null)} 
-          onMouseLeave={() => (dragMode.current = null)}
+          onMouseMove={handleGridMouseMove}
         >
           
           <div style={{
-            position: 'absolute', top: 0, bottom: 0,
+            position: 'absolute', top: 0, 
+            height: `${allGridNotes.length * 24}px`, 
             left: `${(currentTick / (totalBeats * 48)) * 100}%`, 
             width: '2px', background: 'rgba(255, 255, 255, 0.8)',
             boxShadow: '0 0 10px rgba(255,255,255,0.8)', zIndex: 50, pointerEvents: 'none'
@@ -492,7 +555,6 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
                       borderTop: '1px solid rgba(255, 255, 255, 0.4)', 
                       borderRadius: '3px',
                       boxShadow: 'inset 0 -4px 8px rgba(0,0,0,0.2)', 
-                      cursor: 'pointer',
                       zIndex: 10
                     }}
                     onMouseDown={(e) => {
@@ -505,7 +567,26 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, bpm, stepsCo
                     onMouseEnter={() => {
                       if (dragMode.current === "erase") deleteNote(note.id);
                     }}
-                  />
+                  >
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: '8px',
+                        cursor: 'ew-resize',
+                        zIndex: 20
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        if (e.button === 0) {
+                          dragMode.current = "resize";
+                          resizeNoteId.current = note.id;
+                        }
+                      }}
+                    />
+                  </div>
                 ))}
               </div>
             );

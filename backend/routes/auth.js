@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const User = require("../models/User"); // Import your flawless User model
+const User = require("../models/User"); 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -23,14 +23,15 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "Producer or Email already exists in the Forge." });
     }
 
-    // 2. Create the new producer (Your pre-save hook handles the hashing!)
+    // 2. Create the new producer
     const user = await User.create({ username, email, password });
 
-    // 3. Send back the success response with a token
+    // 3. Send back the success response with a token AND isPro status
     res.status(201).json({
       _id: user._id,
       username: user.username,
       email: user.email,
+      isPro: user.isPro, // 🌟 FIX: Tell React their Pro status
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -59,11 +60,12 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    // 3. Send back the success response with a token
+    // 3. Send back the success response with a token AND isPro status
     res.json({
       _id: user._id,
       username: user.username,
       email: user.email,
+      isPro: user.isPro, // 🌟 FIX: Tell React they are Pro when they log back in!
       token: generateToken(user._id),
     });
   } catch (error) {

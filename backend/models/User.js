@@ -6,6 +6,7 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
+  isPro: { type: Boolean, default: false } // 🌟 Flawlessly defined
 });
 
 // Hash password before saving to the database
@@ -17,4 +18,5 @@ UserSchema.pre("save", async function () {
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
+
 module.exports = mongoose.model("User", UserSchema);

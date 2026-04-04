@@ -6,6 +6,7 @@ import Sidebar from "./components/Sidebar";
 import StepSequencer from "./components/StepSequencer";
 import MelodyMatrix from "./components/MelodyMatrix";
 import LivePad from "./components/LivePad"; 
+import Community from "./components/Community";
 import "./App.css";
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
     const hash = window.location.hash.replace('#', '');
     if (hash.startsWith('studio')) return 'studio';
     if (hash === 'auth') return 'auth';
+    if (hash === 'community') return 'community'; 
     return 'landing';
   };
 
@@ -42,7 +44,7 @@ export default function App() {
   const [playbackStartTime, setPlaybackStartTime] = useState(0);
 
   useEffect(() => {
-    if (currentView === "auth") setIsPlaying(false);
+    if (currentView === "auth" || currentView === "community") setIsPlaying(false);
   }, [currentView]);
 
   useEffect(() => {
@@ -51,7 +53,6 @@ export default function App() {
     }
   }, [isPlaying]);
 
-  // 🛑 THE FIX FOR YOUR WARNING: Move the logic inside the block!
   useEffect(() => {
     if (activeStudioView === 'livepad') {
       setIsPlaying(false);
@@ -80,6 +81,8 @@ export default function App() {
         }
       } else if (hash === 'auth') {
         setCurrentView('auth');
+      } else if (hash === 'community') {
+        setCurrentView('community'); 
       } else {
         setCurrentView('landing');
       }
@@ -101,10 +104,17 @@ export default function App() {
     setCurrentView("studio"); 
   };
 
+  const handleUpgradeSuccess = () => {
+    if (!user) return;
+    const upgradedUser = { ...user, isPro: true };
+    setUser(upgradedUser);
+    localStorage.setItem("beatforge_user", JSON.stringify(upgradedUser));
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("beatforge_token"); 
     localStorage.removeItem("beatforge_user"); 
-    setUser(null);                              
+    setUser(null);                               
     setIsPlaying(false); 
     setHasActiveBeat(false); 
     setMySamples([]); 
@@ -135,60 +145,54 @@ export default function App() {
       )}
 
       {currentView === "landing" && (
-        <Landing onLaunch={() => setCurrentView(isLoggedIn ? "studio" : "auth")} isLoggedIn={isLoggedIn} />
+        <Landing 
+          onLaunch={() => setCurrentView(isLoggedIn ? "studio" : "auth")} 
+          isLoggedIn={isLoggedIn} 
+          setCurrentView={setCurrentView} // 🌟 Passed down to allow Community navigation
+        />
       )}
 
       {currentView === "auth" && (
         <Auth onLogin={handleLogin} onBack={() => setCurrentView("landing")} />
       )}
 
+      {/* 🌟 FIX: Only render TopBar and Studio Workspace when in Studio View */}
       <div 
         className="studio-master-container"
-        style={{ display: currentView === "studio" ? "flex" : "none", flexDirection: "column", height: "100vh", width: "100vw" }}
+        style={{ 
+          display: currentView === "studio" ? "flex" : "none", 
+          flexDirection: "column", height: "100vh", width: "100vw" 
+        }}
       >
         <TopBar 
-          isPlaying={isPlaying} setIsPlaying={setIsPlaying} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} setMasterVolume={setMasterVolume} onLogout={handleLogout} currentUser={user} stepsCount={stepsCount} 
+          setCurrentView={setCurrentView} activeView={currentView} isPlaying={isPlaying} setIsPlaying={setIsPlaying} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} setMasterVolume={setMasterVolume} onLogout={handleLogout} currentUser={user} stepsCount={stepsCount} 
+          onUpgradeSuccess={handleUpgradeSuccess} /* 🌟 NEW PROP PASSED HERE */
         />
         
         <div className="main-workspace" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          
-          <Sidebar 
-            setCurrentView={setCurrentView} activeStudioView={activeStudioView} setActiveStudioView={setActiveStudioView} mySamples={mySamples} setMySamples={setMySamples} currentUser={user}          
-          />
+          <Sidebar setCurrentView={setCurrentView} activeStudioView={activeStudioView} setActiveStudioView={setActiveStudioView} mySamples={mySamples} setMySamples={setMySamples} currentUser={user} />
           
           <div className="sequencer-wrapper" style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
-            
             <div style={{ display: activeStudioView === "sequencer" ? "block" : "none" }}>
-              <StepSequencer 
-                isPlaying={isPlaying} 
-                activeStudioView={activeStudioView}
-                playbackStartTime={playbackStartTime} 
-                bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} currentUser={user} setHasActiveBeat={setHasActiveBeat} stepsCount={stepsCount} setStepsCount={setStepsCount} mySamples={mySamples} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns}
-              />
+              <StepSequencer isPlaying={isPlaying} activeStudioView={activeStudioView} playbackStartTime={playbackStartTime} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} currentUser={user} setHasActiveBeat={setHasActiveBeat} stepsCount={stepsCount} setStepsCount={setStepsCount} mySamples={mySamples} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} />
             </div>
-
             <div style={{ display: activeStudioView === "beatmaker" ? "block" : "none", height: '100%' }}>
-              <MelodyMatrix 
-                isPlaying={isPlaying} 
-                activeStudioView={activeStudioView}
-                playbackStartTime={playbackStartTime} 
-                bpm={bpm} stepsCount={stepsCount} setHasActiveBeat={setHasActiveBeat} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns}
-              />
+              <MelodyMatrix isPlaying={isPlaying} activeStudioView={activeStudioView} playbackStartTime={playbackStartTime} bpm={bpm} stepsCount={stepsCount} setHasActiveBeat={setHasActiveBeat} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} currentUser={user} />
             </div>
-
             <div style={{ display: activeStudioView === "livepad" ? "block" : "none", height: '100%' }}>
-              <LivePad 
-                projectPatterns={projectPatterns} 
-                isPlaying={isPlaying} 
-                activeStudioView={activeStudioView}
-                bpm={bpm} 
-                playbackStartTime={playbackStartTime}
-              />
+              <LivePad projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} isPlaying={isPlaying} activeStudioView={activeStudioView} bpm={bpm} playbackStartTime={playbackStartTime} />
             </div>
-
           </div>
         </div>
       </div>
+
+      {/* 🌟 FIX: Render Community standalone with no TopBar */}
+      {currentView === "community" && (
+        <div style={{ height: '100vh', width: '100vw', overflowY: 'auto', background: 'var(--bg-dark)' }}>
+          <Community currentUser={user} onNavigate={setCurrentView} />
+        </div>
+      )}
+
     </div>
   );
 }
