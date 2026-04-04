@@ -21,6 +21,13 @@ export default function Auth({ onLogin }) {
     e.preventDefault();
     setErrorMsg("");
 
+    // 🌟 FIX: Strict Email Validation Regex (Requires a proper domain ending like .com)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setErrorMsg("Please enter a valid email address (eg:producer@gmail.com).");
+      return;
+    }
+
     // Prevent submission if registering and passwords don't match
     if (!isLoginView && password !== confirmPassword) {
       setErrorMsg("Passwords do not match!");
@@ -63,17 +70,16 @@ export default function Auth({ onLogin }) {
       // Save the JWT token so the user stays logged in across sessions
       localStorage.setItem("beatforge_token", data.token);
 
-      // 🌟 FIX: Tell the main App that we are officially logged in AND pass the isPro status!
+      // Tell the main App that we are officially logged in AND pass the isPro status!
       onLogin({ 
         _id: data._id, 
         username: data.username, 
         email: data.email,
-        isPro: data.isPro // <-- THIS is what fixes the logout bug!
+        isPro: data.isPro 
       });
 
     } catch (error) {
       setIsLoading(false);
-      // Show the exact error message from your Node backend (e.g., "Producer already exists")
       setErrorMsg(error.message);
     }
   };

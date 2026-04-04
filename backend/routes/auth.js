@@ -26,12 +26,12 @@ router.post("/register", async (req, res) => {
     // 2. Create the new producer
     const user = await User.create({ username, email, password });
 
-    // 3. Send back the success response with a token AND isPro status
+    // 3. Send back the success response
     res.status(201).json({
       _id: user._id,
       username: user.username,
       email: user.email,
-      isPro: user.isPro, // 🌟 FIX: Tell React their Pro status
+      isPro: user.isPro, 
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -50,22 +50,26 @@ router.post("/login", async (req, res) => {
 
     // 1. Find the producer by email
     const user = await User.findOne({ email });
+    
+    // 🌟 FIX: Specifically tell the user they haven't registered yet
     if (!user) {
-      return res.status(401).json({ message: "Invalid email or password." });
+      return res.status(401).json({ message: "You haven't registered yet. Register First!" });
     }
 
     // 2. Check if the password matches the hashed password in DB
     const isMatch = await bcrypt.compare(password, user.password);
+    
+    // 🌟 FIX: Specific message if the email exists but password is wrong
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid email or password." });
+      return res.status(401).json({ message: "Incorrect password." });
     }
 
-    // 3. Send back the success response with a token AND isPro status
+    // 3. Send back the success response
     res.json({
       _id: user._id,
       username: user.username,
       email: user.email,
-      isPro: user.isPro, // 🌟 FIX: Tell React they are Pro when they log back in!
+      isPro: user.isPro, 
       token: generateToken(user._id),
     });
   } catch (error) {

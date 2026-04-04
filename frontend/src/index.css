@@ -4,6 +4,7 @@
 /* 🌟 Re-added 'Inter' for clean, spacious UI elements */
 @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Azeret+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;900&display=swap');
 
+
 /* ========================= */
 /* GLOBAL DARK THEME         */
 /* ========================= */
@@ -210,3 +211,4 @@ option {
 
 .status-dot.green { background-color: #00e676; box-shadow: 0 0 8px #00e676; }
 .status-dot.red   { background-color: #ff4757; box-shadow: 0 0 8px #ff4757; }
+

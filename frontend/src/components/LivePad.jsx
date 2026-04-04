@@ -19,7 +19,31 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
   const intervalRef = useRef(null);
   const lastPlayedTickRef = useRef(-1);
 
+  // 🌟 NEW: The Kill Switch Memory Bank
+  const activeAudioNodesRef = useRef([]);
+
   const isCurrentlyPlaying = isPlaying && activeStudioView === "livepad";
+
+  // 🌟 NEW: When playback stops, instantly kill all active synth notes & HTML5 drums
+  useEffect(() => {
+    if (!isCurrentlyPlaying) {
+      // 1. Kill Web Audio API Synths
+      activeAudioNodesRef.current.forEach(node => {
+        try { node.stop(); } catch (e) {} 
+      });
+      activeAudioNodesRef.current = [];
+
+      // 2. Kill lingering HTML5 Audio Drums
+      Object.values(audioPlayersRef.current).forEach(audio => {
+        if (audio && !audio.paused) {
+          try { 
+            audio.pause(); 
+            audio.currentTime = 0; 
+          } catch (e) {}
+        }
+      });
+    }
+  }, [isCurrentlyPlaying]);
 
   useEffect(() => {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -32,7 +56,9 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
     return () => window.removeEventListener('mousedown', wakeAudio);
   }, []);
 
+  // 🌟 FIX: Initialize HTML5 Audio for BOTH default kits and custom sounds!
   useEffect(() => {
+    // 1. Load default kits
     initialDrumKits.forEach(kit => {
       kit.sounds.forEach(sound => {
         if (!audioPlayersRef.current[sound.file]) {
@@ -42,7 +68,20 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
         }
       });
     });
-  }, []);
+
+    // 2. Load custom pattern sounds so they aren't silent!
+    (projectPatterns || []).forEach(p => {
+      if (p.type === 'drum' && p.data?.sounds) {
+        p.data.sounds.forEach(sound => {
+          if (sound && sound.file && !audioPlayersRef.current[sound.file]) {
+            const audio = new Audio(sound.file);
+            audio.preload = "auto";
+            audioPlayersRef.current[sound.file] = audio;
+          }
+        });
+      }
+    });
+  }, [projectPatterns]);
 
   const togglePad = (pattern) => {
     if (activePads.includes(pattern.id)) {
@@ -84,7 +123,15 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
     gainNode.gain.linearRampToValueAtTime(0.001, audioCtxRef.current.currentTime + durationInSeconds); 
 
     osc.connect(filter); filter.connect(gainNode); gainNode.connect(audioCtxRef.current.destination);
-    osc.start(); osc.stop(audioCtxRef.current.currentTime + durationInSeconds + 0.1);
+    
+    // 🌟 FIX: Track the oscillator so we can kill it if the user hits pause
+    osc.start(); 
+    osc.stop(audioCtxRef.current.currentTime + durationInSeconds + 0.1);
+    
+    activeAudioNodesRef.current.push(osc);
+    osc.onended = () => {
+      activeAudioNodesRef.current = activeAudioNodesRef.current.filter(n => n !== osc);
+    };
   };
 
   const getNoteFreq = (row) => {
@@ -111,12 +158,11 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
       audioCtxRef.current.resume();
     }
     
-    // 🛠️ THE CUTOFF MELODY FIX: Dynamically find the longest pattern being played!
     let activeStepsCount = 16; 
     activePads.forEach(padId => {
       const pattern = (projectPatterns || []).find(p => p.id === padId);
       if (pattern && pattern.stepsCount) {
-        activeStepsCount = Math.max(activeStepsCount, pattern.stepsCount);
+        activeStepsCount = Math.max(activeStepsCount, Number(pattern.stepsCount));
       }
     });
 
@@ -158,19 +204,21 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
             const pattern = (projectPatterns || []).find(p => p.id === padId);
             if (!pattern) return;
 
-            // 🛠️ Wrap the global tick so a 16-step drum loops smoothly under a 32-step melody!
-            const pSteps = pattern.stepsCount || 16;
+            const pSteps = Number(pattern.stepsCount) || 16;
             const pTotalTicks = pSteps * (TICKS_PER_BEAT / 4);
             const localTick = tick % pTotalTicks; 
 
             if (pattern.type === 'drum') {
               if (localTick % 12 === 0) {
-                const currentDrumStep = localTick / 12;
-                const kit = initialDrumKits[pattern.data.kitIndex] || initialDrumKits[0];
+                const currentDrumStep = Math.floor(localTick / 12);
+                
+                // 🌟 FIX: Look for custom sounds saved in the pattern FIRST, then fallback to default kit
+                const soundsArray = pattern.data.sounds || initialDrumKits[pattern.data.kitIndex]?.sounds || [];
                 
                 pattern.data.grid.forEach((row, rowIndex) => {
                   if (row && row[currentDrumStep]) {
-                    const audio = audioPlayersRef.current[kit.sounds[rowIndex]?.file];
+                    const soundFile = soundsArray[rowIndex]?.file;
+                    const audio = audioPlayersRef.current[soundFile];
                     if (audio) {
                       audio.currentTime = 0;
                       audio.volume = pattern.data.volumes[rowIndex] || 1;

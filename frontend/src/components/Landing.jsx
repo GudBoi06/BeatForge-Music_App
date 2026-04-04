@@ -5,7 +5,7 @@ import "../styles/landing.css";
 const FAQ_ITEMS = [
   {
     q: "Is BeatForge completely free to use?",
-    a: "Yes — BeatForge is 100% free and runs entirely in your browser. No credit card, no subscription, no downloads required.",
+    a: "Yes, you can use the core BeatForge studio for free, forever! If you want to unlock advanced features like audio exports and custom samples, you can grab a lifetime BeatForge Pro license for a single, one-time payment.",
   },
   {
     q: "Do I need music production experience?",
@@ -13,19 +13,19 @@ const FAQ_ITEMS = [
   },
   {
     q: "Can I upload my own audio samples?",
-    a: "Absolutely. BeatForge supports custom audio sample uploads in common formats (WAV, MP3, OGG). Just drag your file into the sample slot and start sequencing.",
+    a: "Absolutely. BeatForge supports custom audio sample uploads in common formats (WAV, MP3, OGG). Just upload your file into the sample slot and start sequencing.",
   },
   {
     q: "What browsers are supported?",
-    a: "BeatForge works on any modern browser — Chrome, Firefox, Edge, and Safari. For the best audio performance, we recommend Chrome or Brave.",
+    a: "BeatForge works on any modern browser — Chrome, Firefox, Edge, and Brave. For the best audio performance, we recommend Chrome or Brave.",
   },
   {
     q: "Can I save and export my beats?",
-    a: "Yes. You can export your finished beats as audio files directly from the studio. Your session is also auto-saved in your browser so you never lose progress.",
+    a: "Yes. You can export your finished beats as audio files directly from the studio. Log in from anywhere and your studio will be exactly how you left it.",
   },
   {
     q: "Is BeatForge inspired by professional DAWs?",
-    a: "Yes — BeatForge takes inspiration from FL Studio and Serum, bringing their core workflow patterns into a simplified, accessible, browser-native experience.",
+    a: "Yes — BeatForge takes inspiration from FL Studio and Ableton, bringing their core workflow patterns into a simplified, accessible, browser-native experience.",
   },
 ];
 
@@ -38,17 +38,8 @@ const FEATURES = [
         <rect x="12" y="8" width="3" height="8" rx="1" /><rect x="17" y="3" width="3" height="13" rx="1" />
       </svg>
     ),
-    title: "16-Step Sequencer",
+    title: "32 Grid Step Sequencer",
     desc: "FL Studio–style step grid for building drum patterns, basslines, and melodic phrases with precision.",
-  },
-  {
-    icon: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 9l4-4 4 4" /><path d="M9 5v14" /><path d="M19 15l-4 4-4-4" /><path d="M15 19V5" />
-      </svg>
-    ),
-    title: "Drag & Drop",
-    desc: "Arrange samples and clips on your timeline with natural drag-and-drop. Reorder, trim, and stack with ease.",
   },
   {
     icon: (
@@ -88,6 +79,15 @@ const FEATURES = [
     title: "Upload Samples",
     desc: "Drop in your own WAV or MP3 files and sequence them instantly. Your sounds, your beats, your identity.",
   },
+  {
+    icon: (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 9l4-4 4 4" /><path d="M9 5v14" /><path d="M19 15l-4 4-4-4" /><path d="M15 19V5" />
+      </svg>
+    ),
+    title: "High-Quality Audio Export",
+    desc: "Instantly export your beats as high-fidelity audio files, ready to share or drop into any project.",
+  }
 ];
 
 /* ─── HELPERS ────────────────────────────────────────────────── */
@@ -412,12 +412,12 @@ export default function Landing({ onLaunch, isLoggedIn, setCurrentView }) {
           </h1>
 
           <p className="hero-subtitle">
-            Produce, sequence, and arrange professional beats entirely in your browser.
+            Produce, sequence, and arrange professional beats entirely in Livepad.
             No downloads. No hardware. No limits — just pure creativity.
           </p>
 
           <div className="hero-stats">
-            {[["32", "Step Grid"], ["∞", "Samples"], ["68,563", "Downloads"]].map(([n, l]) => (
+            {[["32", "Step Grid"], ["∞", "Samples"], ["68,563", "Producers"]].map(([n, l]) => (
               <div className="hero-stat" key={l}>
                 <span className="hero-stat__num">{n}</span>
                 <span className="hero-stat__label">{l}</span>
@@ -529,11 +529,11 @@ export default function Landing({ onLaunch, isLoggedIn, setCurrentView }) {
             <div className="section-tag">About BeatForge</div>
             <h2 className="section-title">Built for Beginners.<br />Capable Enough for Pros.</h2>
             <p className="about-text">
-              BeatForge started from a simple frustration — professional music tools like FL Studio and Serum are
+              BeatForge started from a simple frustration — professional music tools like FL Studio and Abelton are
               incredibly powerful, but they're expensive, complex, and require installation.
             </p>
             <p className="about-text">
-              So we built BeatForge: a lightweight, web-based studio that brings the core workflow of professional
+              So we built BeatForge: a lightweight, web-based  Beat-Making studio that brings the core workflow of professional
               DAWs into your browser. No barriers. No gatekeeping. Just music.
             </p>
             <p className="about-text">

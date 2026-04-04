@@ -91,17 +91,14 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  useEffect(() => {
-    const token = localStorage.getItem("beatforge_token");
-    if (token && currentView === "landing" && window.location.hash === "") {
-      setCurrentView("studio");
-    }
-  }, [currentView]);
+  // 🌟 FIX 1: The old auto-redirect useEffect that forced logged-in users 
+  // away from the landing page has been removed!
 
   const handleLogin = (userData) => {
     localStorage.setItem("beatforge_user", JSON.stringify(userData)); 
     setUser(userData);
-    setCurrentView("studio"); 
+    // 🌟 FIX 2: Send the user to the landing page after a successful login
+    setCurrentView("landing"); 
   };
 
   const handleUpgradeSuccess = () => {
@@ -148,7 +145,7 @@ export default function App() {
         <Landing 
           onLaunch={() => setCurrentView(isLoggedIn ? "studio" : "auth")} 
           isLoggedIn={isLoggedIn} 
-          setCurrentView={setCurrentView} // 🌟 Passed down to allow Community navigation
+          setCurrentView={setCurrentView} 
         />
       )}
 
@@ -156,7 +153,6 @@ export default function App() {
         <Auth onLogin={handleLogin} onBack={() => setCurrentView("landing")} />
       )}
 
-      {/* 🌟 FIX: Only render TopBar and Studio Workspace when in Studio View */}
       <div 
         className="studio-master-container"
         style={{ 
@@ -166,7 +162,7 @@ export default function App() {
       >
         <TopBar 
           setCurrentView={setCurrentView} activeView={currentView} isPlaying={isPlaying} setIsPlaying={setIsPlaying} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} setMasterVolume={setMasterVolume} onLogout={handleLogout} currentUser={user} stepsCount={stepsCount} 
-          onUpgradeSuccess={handleUpgradeSuccess} /* 🌟 NEW PROP PASSED HERE */
+          onUpgradeSuccess={handleUpgradeSuccess} 
         />
         
         <div className="main-workspace" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -180,13 +176,12 @@ export default function App() {
               <MelodyMatrix isPlaying={isPlaying} activeStudioView={activeStudioView} playbackStartTime={playbackStartTime} bpm={bpm} stepsCount={stepsCount} setHasActiveBeat={setHasActiveBeat} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} currentUser={user} />
             </div>
             <div style={{ display: activeStudioView === "livepad" ? "block" : "none", height: '100%' }}>
-              <LivePad projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} isPlaying={isPlaying} activeStudioView={activeStudioView} bpm={bpm} playbackStartTime={playbackStartTime} />
+              <LivePad projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} isPlaying={isPlaying} activeStudioView={activeStudioView} bpm={bpm} playbackStartTime={playbackStartTime} currentUser={user} />
             </div>
           </div>
         </div>
       </div>
 
-      {/* 🌟 FIX: Render Community standalone with no TopBar */}
       {currentView === "community" && (
         <div style={{ height: '100vh', width: '100vw', overflowY: 'auto', background: 'var(--bg-dark)' }}>
           <Community currentUser={user} onNavigate={setCurrentView} />

@@ -12,6 +12,9 @@ const presetSchema = new mongoose.Schema({
   grid: [[Boolean]],      
   volumes: [Number],      
   mutedTracks: [Boolean], 
+
+  // 🌟 NEW: Allows MongoDB to save your custom Base64 uploaded samples!
+  sounds: { type: Array },
   
   createdAt: { type: Date, default: Date.now }
 });

@@ -11,30 +11,83 @@ const SCALES = {
   "Harmonic Minor": [0, 2, 3, 5, 7, 8, 11]
 };
 
-export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStartTime, bpm, stepsCount = 16, setHasActiveBeat, projectPatterns, setProjectPatterns, currentUser }) {
-  const [rootNote, setRootNote] = useState(0); 
-  const [scaleType, setScaleType] = useState("Minor");
+export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStartTime, bpm, setBpm, stepsCount = 16, setStepsCount, setHasActiveBeat, projectPatterns, setProjectPatterns, currentUser }) {
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const [rootNote, setRootNote] = useState(() => {
+    const saved = localStorage.getItem("beatforge_melody_session");
+    return saved && JSON.parse(saved).rootNote !== undefined ? JSON.parse(saved).rootNote : 0;
+  }); 
+
+  const [scaleType, setScaleType] = useState(() => {
+    const saved = localStorage.getItem("beatforge_melody_session");
+    return saved && JSON.parse(saved).scaleType ? JSON.parse(saved).scaleType : "Minor";
+  });
   
-  const [gridSnap, setGridSnap] = useState(1); 
+  const [gridSnap, setGridSnap] = useState(() => {
+    const saved = localStorage.getItem("beatforge_melody_session");
+    return saved && JSON.parse(saved).gridSnap ? JSON.parse(saved).gridSnap : 1;
+  }); 
+
+  const [notes, setNotes] = useState(() => {
+    const saved = localStorage.getItem("beatforge_melody_session");
+    return saved && JSON.parse(saved).notes ? JSON.parse(saved).notes : [];
+  });
+
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isSnapMenuOpen, setIsSnapMenuOpen] = useState(false);
-  
   const [drawTool, setDrawTool] = useState("pencil"); 
-  
-  const [notes, setNotes] = useState([]);
   const [currentTick, setCurrentTick] = useState(0); 
   
   const intervalRef = useRef(null);
   const dragMode = useRef(null);
   const dropdownRef = useRef(null);
-
   const resizeNoteId = useRef(null);
 
+  // 🌟 NEW: The Kill Switch Memory Bank
+  const activeAudioNodesRef = useRef([]);
+
   const lastPlayedTickRef = useRef(-1);
-  const totalBeats = stepsCount / 4;
+  const totalBeats = Number(stepsCount) / 4; 
   const isCurrentlyPlaying = isPlaying && (activeStudioView === "beatmaker" || activeStudioView === "sequencer");
 
   const [saveStatus, setSaveStatus] = useState("idle");
+  const [showLivePadModal, setShowLivePadModal] = useState(false);
+  const [livePadName, setLivePadName] = useState("");
+
+  const prevBpmRef = useRef(bpm);
+  const prevStepsCountRef = useRef(stepsCount);
+  const virtualStartTimeRef = useRef(0);
+
+  // 🌟 NEW: When playback stops, instantly kill all active synth notes
+  useEffect(() => {
+    if (!isCurrentlyPlaying) {
+      activeAudioNodesRef.current.forEach(node => {
+        try { node.stop(); } catch (e) {}
+      });
+      activeAudioNodesRef.current = [];
+    }
+  }, [isCurrentlyPlaying]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("beatforge_melody_session");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.bpm && setBpm) setBpm(parsed.bpm);
+      if (parsed.stepsCount && setStepsCount) setStepsCount(parsed.stepsCount);
+      if (parsed.notes && parsed.notes.length > 0 && setHasActiveBeat) {
+        setHasActiveBeat(true);
+      }
+    }
+    setTimeout(() => setIsLoaded(true), 50);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const session = { notes, rootNote, scaleType, gridSnap, bpm, stepsCount };
+    localStorage.setItem("beatforge_melody_session", JSON.stringify(session));
+  }, [notes, rootNote, scaleType, gridSnap, bpm, stepsCount, isLoaded]);
 
   const allGridNotes = useMemo(() => {
     const arr = [];
@@ -108,37 +161,72 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
     filter.connect(gainNode);
     gainNode.connect(masterGain); 
 
+    // 🌟 FIX: Track it and clean it up when done!
     osc.start();
     osc.stop(audioCtx.currentTime + durationInSeconds + 0.1);
+    
+    activeAudioNodesRef.current.push(osc);
+    osc.onended = () => {
+      activeAudioNodesRef.current = activeAudioNodesRef.current.filter(n => n !== osc);
+    };
   };
 
   useEffect(() => {
+    const numericSteps = Number(stepsCount);
+
     if (!isCurrentlyPlaying || !playbackStartTime) {
       clearTimeout(intervalRef.current);
       intervalRef.current = null;
       setCurrentTick(0);
       lastPlayedTickRef.current = -1;
+      virtualStartTimeRef.current = 0;
       return;
     }
     
-    // 🌟 FIX 1: STALE CLOCK GUARD
-    // Prevents double-firing the first note if React hasn't updated the global clock yet
     if (Date.now() - playbackStartTime > 500 && lastPlayedTickRef.current === -1) {
       return; 
     }
 
-    clearTimeout(intervalRef.current);
-    
-    if (audioCtx?.state === "suspended") {
-      audioCtx.resume();
+    if (!virtualStartTimeRef.current || lastPlayedTickRef.current === -1) {
+      virtualStartTimeRef.current = playbackStartTime;
+      prevBpmRef.current = bpm;
+      prevStepsCountRef.current = numericSteps;
     }
+
+    if (bpm !== prevBpmRef.current || numericSteps !== prevStepsCountRef.current) {
+      const TICKS_PER_BEAT = 48;
+      const oldTickDurationMs = (60000 / prevBpmRef.current) / TICKS_PER_BEAT;
+      const OLD_TOTAL_TICKS = (prevStepsCountRef.current / 4) * TICKS_PER_BEAT;
+      
+      const elapsedOld = Date.now() - virtualStartTimeRef.current;
+      
+      const absoluteOldTick = Math.floor(elapsedOld / oldTickDurationMs);
+      const currentOldTick = absoluteOldTick % OLD_TOTAL_TICKS;
+      const remainderMs = elapsedOld % oldTickDurationMs;
+      
+      const newTickDurationMs = (60000 / bpm) / TICKS_PER_BEAT;
+      const NEW_TOTAL_TICKS = (numericSteps / 4) * TICKS_PER_BEAT;
+      
+      const wrappedNewTick = currentOldTick % NEW_TOTAL_TICKS;
+      
+      const equivalentElapsedNew = (wrappedNewTick * newTickDurationMs) + ((remainderMs / oldTickDurationMs) * newTickDurationMs);
+      
+      virtualStartTimeRef.current = Date.now() - equivalentElapsedNew;
+      
+      prevBpmRef.current = bpm;
+      prevStepsCountRef.current = numericSteps;
+      lastPlayedTickRef.current = wrappedNewTick; 
+    }
+
+    clearTimeout(intervalRef.current);
+    if (audioCtx?.state === "suspended") audioCtx.resume();
     
     const TICKS_PER_BEAT = 48; 
     const tickDurationMs = (60000 / bpm) / TICKS_PER_BEAT; 
     const TOTAL_TICKS = totalBeats * TICKS_PER_BEAT; 
 
     const scheduleNextTick = () => {
-      const elapsedMs = Date.now() - playbackStartTime;
+      const elapsedMs = Date.now() - virtualStartTimeRef.current;
       const absoluteTick = Math.floor(elapsedMs / tickDurationMs);
       const currentLoopTick = absoluteTick % TOTAL_TICKS;
 
@@ -175,7 +263,7 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
       }
 
       const nextAbsoluteTick = absoluteTick + 1;
-      const timeOfNextTick = playbackStartTime + (nextAbsoluteTick * tickDurationMs);
+      const timeOfNextTick = virtualStartTimeRef.current + (nextAbsoluteTick * tickDurationMs);
       const timeUntilNext = Math.max(0, timeOfNextTick - Date.now());
 
       intervalRef.current = setTimeout(scheduleNextTick, timeUntilNext);
@@ -185,15 +273,13 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
     
     return () => clearTimeout(intervalRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCurrentlyPlaying, playbackStartTime, bpm, totalBeats]); 
+  }, [isCurrentlyPlaying, playbackStartTime, bpm, totalBeats, stepsCount]); 
 
   const handleGridClick = (row, startBeat) => {
     if (setHasActiveBeat) setHasActiveBeat(true);
     
     const newEndBeat = startBeat + gridSnap;
     
-    // 🌟 FIX 2: FUNCTIONAL STATE UPDATE
-    // Prevents stacking duplicate notes on top of each other when sweeping the mouse quickly
     setNotes(prevNotes => {
       const filteredNotes = prevNotes.filter(n => {
         if (n.row !== row) return true;
@@ -244,24 +330,28 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
     if (setHasActiveBeat) setHasActiveBeat(true);
   };
 
-  const saveToLivePad = () => {
+  const initiateSaveToLivePad = () => {
     if (notes.length === 0) {
       setSaveStatus("empty");
       setTimeout(() => setSaveStatus("idle"), 2000);
       return;
     }
-    
     const patternCount = (projectPatterns || []).filter(p => p.type === 'melody').length + 1;
-    const patternName = `Melody ${patternCount}`;
+    setLivePadName(`Melody ${patternCount}`); 
+    setShowLivePadModal(true);
+  };
 
+  const confirmSaveToLivePad = () => {
+    const finalName = livePadName.trim() || `Melody ${(projectPatterns || []).filter(p => p.type === 'melody').length + 1}`;
+    
     const newPattern = {
       id: `melody-${Date.now()}`,
       type: 'melody',
-      name: patternName,
+      name: finalName,
       data: [...notes], 
       scale: scaleType,
       root: rootNote,
-      stepsCount: stepsCount 
+      stepsCount: Number(stepsCount) 
     };
 
     if (setProjectPatterns) {
@@ -269,6 +359,7 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
     }
+    setShowLivePadModal(false);
   };
 
   const handleGridMouseMove = (e) => {
@@ -281,12 +372,9 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
       setNotes(prev => {
         const noteIndex = prev.findIndex(n => n.id === resizeNoteId.current);
         if (noteIndex === -1) return prev;
-        
         const n = prev[noteIndex];
         const newDuration = Math.max(gridSnap, snappedBeat - n.startBeat);
-        
         if (Math.abs(n.durationBeats - newDuration) < 0.001) return prev;
-        
         const copy = [...prev];
         copy[noteIndex] = { ...n, durationBeats: newDuration };
         return copy;
@@ -313,6 +401,30 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
       onContextMenu={(e) => e.preventDefault()}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}
     >
+      {showLivePadModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: '#111', padding: '30px', borderRadius: '12px', border: '1px solid #333', textAlign: 'center', maxWidth: '350px', width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.8)' }}>
+            <div style={{ fontSize: '45px', marginBottom: '10px' }}>🎹</div>
+            <h3 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: '20px', letterSpacing: '1px' }}>NAME YOUR MELODY</h3>
+            
+            <input 
+              autoFocus
+              type="text" 
+              value={livePadName} 
+              onChange={(e) => setLivePadName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && confirmSaveToLivePad()} 
+              className="led-input" 
+              style={{ width: '100%', marginBottom: '20px', boxSizing: 'border-box', textAlign: 'center', fontSize: '16px', padding: '10px' }} 
+            />
+            
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button className="panel-btn" onClick={() => setShowLivePadModal(false)} style={{ flex: 1, background: '#222', color: '#fff', cursor: 'pointer' }}>CANCEL</button>
+              <button className="panel-btn action-btn" onClick={confirmSaveToLivePad} style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>SAVE TO PAD</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .custom-zoom-slider { -webkit-appearance: none; width: 80px; background: transparent; }
         .custom-zoom-slider::-webkit-slider-runnable-track { height: 6px; background: #0a0a0c; border-radius: 3px; border: 1px solid #222; }
@@ -405,7 +517,7 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
         <div style={{ flex: 1 }}></div>
 
         <button 
-          onClick={saveToLivePad} 
+          onClick={initiateSaveToLivePad} 
           className="panel-btn action-btn" 
           style={{ 
             fontWeight: 'bold', 
