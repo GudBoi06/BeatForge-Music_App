@@ -96,7 +96,6 @@ export default function StepSequencer({
 
   const isCurrentlyPlaying = isPlaying && (activeStudioView === "sequencer" || activeStudioView === "beatmaker");
 
-  // 🌟 FIX: Added currentKitIndex to dependencies to solve the ESLint warning
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -209,32 +208,30 @@ export default function StepSequencer({
     }));
   }, [stepsCount, isLoaded]);
 
+  // 🌟 FIX: Non-Destructive Array Handling. We NEVER slice/truncate the arrays anymore!
   useEffect(() => {
     if (!isLoaded) return;
     const numericSteps = Number(stepsCount);
     const targetLength = kits[currentKitIndex]?.sounds?.length || 0;
     
     setGrid(prev => {
-      if (prev.length === targetLength) return prev; 
+      if (prev.length >= targetLength) return prev; 
       const newGrid = [...(prev || [])];
       while (newGrid.length < targetLength) newGrid.push(Array(numericSteps).fill(false));
-      if (newGrid.length > targetLength) return newGrid.slice(0, targetLength);
       return newGrid; 
     });
     
     setVolumes(prev => {
-      if (prev.length === targetLength) return prev;
+      if (prev.length >= targetLength) return prev;
       const newVols = [...(prev || [])];
       while (newVols.length < targetLength) newVols.push(1);
-      if (newVols.length > targetLength) return newVols.slice(0, targetLength);
       return newVols; 
     });
     
     setMutedTracks(prev => {
-      if (prev.length === targetLength) return prev;
+      if (prev.length >= targetLength) return prev;
       const newMutes = [...(prev || [])];
       while (newMutes.length < targetLength) newMutes.push(false);
-      if (newMutes.length > targetLength) return newMutes.slice(0, targetLength);
       return newMutes; 
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps

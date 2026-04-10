@@ -21,17 +21,27 @@ export default function Auth({ onLogin }) {
     e.preventDefault();
     setErrorMsg("");
 
-    // 🌟 FIX: Strict Email Validation Regex (Requires a proper domain ending like .com)
+    // 🌟 Strict Email Validation Regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setErrorMsg("Please enter a valid email address (eg:producer@gmail.com).");
       return;
     }
 
-    // Prevent submission if registering and passwords don't match
-    if (!isLoginView && password !== confirmPassword) {
-      setErrorMsg("Passwords do not match!");
-      return;
+    // 🌟 Registration Only Validations
+    if (!isLoginView) {
+      // 1. Passwords must match
+      if (password !== confirmPassword) {
+        setErrorMsg("Passwords do not match!");
+        return;
+      }
+
+      // 2. Strict Password Strength Validation
+      const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
+      if (!passwordRegex.test(password)) {
+        setErrorMsg("Password must be at least 8 characters long, contain one uppercase letter, and one special character.");
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -42,7 +52,7 @@ export default function Auth({ onLogin }) {
         ? { email, password } 
         : { username, email, password };
 
-      // 2. Point to your Node.js server (assuming it's on port 5000)
+      // 2. Point to your Node.js server
       const endpoint = isLoginView 
         ? "http://localhost:5000/api/auth/login" 
         : "http://localhost:5000/api/auth/register";
@@ -59,7 +69,7 @@ export default function Auth({ onLogin }) {
       // 4. Parse the backend response
       const data = await response.json();
 
-      // 5. Check if the server sent back an error status (like 400 or 401)
+      // 5. Check if the server sent back an error status
       if (!response.ok) {
         throw new Error(data.message || "Something went wrong.");
       }
@@ -145,6 +155,24 @@ export default function Auth({ onLogin }) {
               {showPassword ? eyeOpen : eyeClosed}
             </button>
           </div>
+
+          {/* 🌟 NEW: Password Hint Box (Only shows during registration) */}
+          {!isLoginView && (
+            <div style={{
+              fontSize: '11px',
+              color: '#aaa',
+              marginTop: '-10px',
+              marginBottom: '15px',
+              padding: '10px',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '6px',
+              borderLeft: '2px solid var(--accent, #a64aff)',
+              lineHeight: '1.4',
+              textAlign: 'left'
+            }}>
+              ℹ️ Password must be at least <strong>8 characters</strong> and include <strong>1 uppercase letter</strong> and <strong>1 special character</strong>.
+            </div>
+          )}
 
           {/* CONFIRM PASSWORD FIELD (Registration Only) */}
           {!isLoginView && (
