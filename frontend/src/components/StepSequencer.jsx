@@ -208,30 +208,32 @@ export default function StepSequencer({
     }));
   }, [stepsCount, isLoaded]);
 
-  // 🌟 FIX: Non-Destructive Array Handling. We NEVER slice/truncate the arrays anymore!
   useEffect(() => {
     if (!isLoaded) return;
     const numericSteps = Number(stepsCount);
     const targetLength = kits[currentKitIndex]?.sounds?.length || 0;
     
     setGrid(prev => {
-      if (prev.length >= targetLength) return prev; 
+      if (prev.length === targetLength) return prev; 
       const newGrid = [...(prev || [])];
       while (newGrid.length < targetLength) newGrid.push(Array(numericSteps).fill(false));
+      if (newGrid.length > targetLength) return newGrid.slice(0, targetLength);
       return newGrid; 
     });
     
     setVolumes(prev => {
-      if (prev.length >= targetLength) return prev;
+      if (prev.length === targetLength) return prev;
       const newVols = [...(prev || [])];
       while (newVols.length < targetLength) newVols.push(1);
+      if (newVols.length > targetLength) return newVols.slice(0, targetLength);
       return newVols; 
     });
     
     setMutedTracks(prev => {
-      if (prev.length >= targetLength) return prev;
+      if (prev.length === targetLength) return prev;
       const newMutes = [...(prev || [])];
       while (newMutes.length < targetLength) newMutes.push(false);
+      if (newMutes.length > targetLength) return newMutes.slice(0, targetLength);
       return newMutes; 
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -380,6 +382,18 @@ export default function StepSequencer({
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // 🌟 NEW: Strict File Validation Bouncer
+    // Protects against .m4a, .flac, .pdf, images, etc.
+    const validTypes = ['audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/x-wav'];
+    const validExtensions = ['.wav', '.mp3', '.ogg'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+
+    if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+      alert("⚠️ Invalid file format!\n\nPlease upload only .wav, .mp3, or .ogg files.");
+      e.target.value = null; // Clear the input
+      return;
+    }
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -804,7 +818,7 @@ export default function StepSequencer({
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
-          <input type="file" accept="audio/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
+          <input type="file" accept=".wav,.mp3,.ogg,audio/wav,audio/mpeg,audio/ogg" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
           
           <button className="panel-btn" onClick={() => { if (currentUser?.isPro) { fileInputRef.current.click(); } else { setShowProModal(true); } }} style={{ flex: 1, padding: '12px', borderStyle: 'dashed', borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', letterSpacing: '2px', color: 'var(--text-muted)' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', width: '16px' }}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>

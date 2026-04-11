@@ -31,6 +31,18 @@ export default function Sidebar({ setCurrentView, activeStudioView, setActiveStu
     const file = e.target.files[0];
     if (!file) return;
 
+    // 🌟 NEW: Strict File Validation Bouncer (Sidebar Edition)
+    // Protects your database from storing corrupted or unsupported files!
+    const validTypes = ['audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/x-wav'];
+    const validExtensions = ['.wav', '.mp3', '.ogg'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+
+    if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+      alert("⚠️ Invalid file format!\n\nPlease upload only .wav, .mp3, or .ogg files.");
+      e.target.value = null; // Clear the input
+      return;
+    }
+
     const cleanName = file.name.replace(/\.[^/.]+$/, "");
     const formData = new FormData();
     formData.append("audio", file);
@@ -109,7 +121,8 @@ export default function Sidebar({ setCurrentView, activeStudioView, setActiveStu
               style={{ color: currentUser?.isPro ? 'inherit' : '#FFD700', borderColor: currentUser?.isPro ? 'inherit' : 'rgba(255, 215, 0, 0.4)' }}>
               {currentUser?.isPro ? "+" : "👑"}
             </button>
-            <input type="file" accept="audio/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleSampleUpload} />
+            {/* 🌟 FIX: Updated the accept attribute to only allow specific audio files */}
+            <input type="file" accept=".wav,.mp3,.ogg,audio/wav,audio/mpeg,audio/ogg" ref={fileInputRef} style={{ display: 'none' }} onChange={handleSampleUpload} />
           </div>
 
           <div className="sample-list">
