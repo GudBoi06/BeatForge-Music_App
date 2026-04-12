@@ -44,7 +44,6 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
   const dropdownRef = useRef(null);
   const resizeNoteId = useRef(null);
 
-  // 🌟 NEW: The Kill Switch Memory Bank
   const activeAudioNodesRef = useRef([]);
 
   const lastPlayedTickRef = useRef(-1);
@@ -59,7 +58,6 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
   const prevStepsCountRef = useRef(stepsCount);
   const virtualStartTimeRef = useRef(0);
 
-  // 🌟 NEW: When playback stops, instantly kill all active synth notes
   useEffect(() => {
     if (!isCurrentlyPlaying) {
       activeAudioNodesRef.current.forEach(node => {
@@ -161,7 +159,6 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
     filter.connect(gainNode);
     gainNode.connect(masterGain); 
 
-    // 🌟 FIX: Track it and clean it up when done!
     osc.start();
     osc.stop(audioCtx.currentTime + durationInSeconds + 0.1);
     
@@ -306,28 +303,6 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
       if (newNotes.length === 0 && setHasActiveBeat) setHasActiveBeat(false);
       return newNotes;
     });
-  };
-
-  const autoGenerateMelody = () => {
-    const generated = [];
-    const validRows = [];
-    
-    allGridNotes.forEach((note, index) => {
-      if (note.inScale) validRows.push(index);
-    });
-
-    for (let beat = 0; beat < totalBeats; beat += gridSnap) {
-      if (Math.random() > 0.4) {
-        generated.push({
-          id: Date.now() + Math.random(),
-          row: validRows[Math.floor(Math.random() * validRows.length)],
-          startBeat: beat,
-          durationBeats: gridSnap * (Math.random() > 0.5 ? 1 : 2) 
-        });
-      }
-    }
-    setNotes(generated);
-    if (setHasActiveBeat) setHasActiveBeat(true);
   };
 
   const initiateSaveToLivePad = () => {
@@ -530,10 +505,6 @@ export default function MelodyMatrix({ isPlaying, activeStudioView, playbackStar
           }}
         >
           {saveStatus === 'empty' ? '⚠️ EMPTY' : saveStatus === 'saved' ? '✔️ SAVED' : '💾 TO LIVE PAD'}
-        </button>
-
-        <button onClick={autoGenerateMelody} className="panel-btn action-btn" style={{ fontWeight: 'bold' }}>
-          🎲 AUTO-GENERATE
         </button>
 
         <button onClick={() => { setNotes([]); if (setHasActiveBeat) setHasActiveBeat(false); }} className="panel-btn danger-icon-btn">
