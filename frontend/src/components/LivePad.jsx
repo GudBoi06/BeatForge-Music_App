@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { audioCtx, masterGain } from "../utils/audioEngine"; 
 import "../styles/livepad.css";
 
 const initialDrumKits = [
@@ -11,29 +12,23 @@ const initialDrumKits = [
   { name: "USER KIT", sounds: [{ file: "/sounds/kick.wav" }] }
 ];
 
-export default function LivePad({ projectPatterns = [], setProjectPatterns, isPlaying, activeStudioView, bpm = 120, playbackStartTime }) {
+export default function LivePad({ projectPatterns = [], setProjectPatterns, isPlaying, activeStudioView, bpm = 120, playbackStartTime, masterVolume = 1 }) {
   const [activePads, setActivePads] = useState([]);
   
   const audioPlayersRef = useRef({});
-  const audioCtxRef = useRef(null);
   const intervalRef = useRef(null);
   const lastPlayedTickRef = useRef(-1);
-
-  // 🌟 NEW: The Kill Switch Memory Bank
   const activeAudioNodesRef = useRef([]);
 
   const isCurrentlyPlaying = isPlaying && activeStudioView === "livepad";
 
-  // 🌟 NEW: When playback stops, instantly kill all active synth notes & HTML5 drums
   useEffect(() => {
     if (!isCurrentlyPlaying) {
-      // 1. Kill Web Audio API Synths
       activeAudioNodesRef.current.forEach(node => {
         try { node.stop(); } catch (e) {} 
       });
       activeAudioNodesRef.current = [];
 
-      // 2. Kill lingering HTML5 Audio Drums
       Object.values(audioPlayersRef.current).forEach(audio => {
         if (audio && !audio.paused) {
           try { 
@@ -45,20 +40,16 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
     }
   }, [isCurrentlyPlaying]);
 
+  // 🌟 FIX: Wake the GLOBAL Audio Context, not a separate local one
   useEffect(() => {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!audioCtxRef.current && AudioContext) audioCtxRef.current = new AudioContext();
-    
     const wakeAudio = () => {
-      if (audioCtxRef.current?.state === "suspended") audioCtxRef.current.resume();
+      if (audioCtx?.state === "suspended") audioCtx.resume();
     };
     window.addEventListener('mousedown', wakeAudio);
     return () => window.removeEventListener('mousedown', wakeAudio);
   }, []);
 
-  // 🌟 FIX: Initialize HTML5 Audio for BOTH default kits and custom sounds!
   useEffect(() => {
-    // 1. Load default kits
     initialDrumKits.forEach(kit => {
       kit.sounds.forEach(sound => {
         if (!audioPlayersRef.current[sound.file]) {
@@ -69,7 +60,6 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
       });
     });
 
-    // 2. Load custom pattern sounds so they aren't silent!
     (projectPatterns || []).forEach(p => {
       if (p.type === 'drum' && p.data?.sounds) {
         p.data.sounds.forEach(sound => {
@@ -105,28 +95,28 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
   };
 
   const playSynthNote = (freq, durationInSeconds) => {
-    if (!audioCtxRef.current) return;
-    if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
+    if (!audioCtx) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
 
-    const osc = audioCtxRef.current.createOscillator();
-    const gainNode = audioCtxRef.current.createGain();
-    const filter = audioCtxRef.current.createBiquadFilter();
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
 
     osc.type = "sawtooth"; filter.type = "lowpass";
-    filter.frequency.setValueAtTime(2500, audioCtxRef.current.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(200, audioCtxRef.current.currentTime + (durationInSeconds * 0.9));
-    osc.frequency.setValueAtTime(freq, audioCtxRef.current.currentTime);
+    filter.frequency.setValueAtTime(2500, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + (durationInSeconds * 0.9));
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
 
-    gainNode.gain.setValueAtTime(0, audioCtxRef.current.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.3, audioCtxRef.current.currentTime + 0.02); 
-    gainNode.gain.setValueAtTime(0.3, audioCtxRef.current.currentTime + Math.max(0, durationInSeconds - 0.05)); 
-    gainNode.gain.linearRampToValueAtTime(0.001, audioCtxRef.current.currentTime + durationInSeconds); 
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.02); 
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + Math.max(0, durationInSeconds - 0.05)); 
+    gainNode.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + durationInSeconds); 
 
-    osc.connect(filter); filter.connect(gainNode); gainNode.connect(audioCtxRef.current.destination);
+    // 🌟 FIX: Route synths directly into the masterGain instead of the hardware destination
+    osc.connect(filter); filter.connect(gainNode); gainNode.connect(masterGain); 
     
-    // 🌟 FIX: Track the oscillator so we can kill it if the user hits pause
     osc.start(); 
-    osc.stop(audioCtxRef.current.currentTime + durationInSeconds + 0.1);
+    osc.stop(audioCtx.currentTime + durationInSeconds + 0.1);
     
     activeAudioNodesRef.current.push(osc);
     osc.onended = () => {
@@ -154,8 +144,8 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
 
     clearTimeout(intervalRef.current);
     
-    if (audioCtxRef.current?.state === "suspended") {
-      audioCtxRef.current.resume();
+    if (audioCtx?.state === "suspended") {
+      audioCtx.resume();
     }
     
     let activeStepsCount = 16; 
@@ -211,8 +201,6 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
             if (pattern.type === 'drum') {
               if (localTick % 12 === 0) {
                 const currentDrumStep = Math.floor(localTick / 12);
-                
-                // 🌟 FIX: Look for custom sounds saved in the pattern FIRST, then fallback to default kit
                 const soundsArray = pattern.data.sounds || initialDrumKits[pattern.data.kitIndex]?.sounds || [];
                 
                 pattern.data.grid.forEach((row, rowIndex) => {
@@ -221,7 +209,9 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
                     const audio = audioPlayersRef.current[soundFile];
                     if (audio) {
                       audio.currentTime = 0;
-                      audio.volume = pattern.data.volumes[rowIndex] || 1;
+                      // 🌟 FIX: Multiply the track volume by the Master Volume to enforce scaling!
+                      const trackVol = pattern.data.volumes[rowIndex] !== undefined ? pattern.data.volumes[rowIndex] : 1;
+                      audio.volume = Math.min(1, Math.max(0, trackVol * masterVolume));
                       audio.play().catch(e => {});
                     }
                   }
@@ -256,7 +246,7 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
 
     return () => clearTimeout(intervalRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCurrentlyPlaying, activePads, bpm, projectPatterns, playbackStartTime]);
+  }, [isCurrentlyPlaying, activePads, bpm, projectPatterns, playbackStartTime, masterVolume]); // Add masterVolume to deps
 
   const totalPads = 16;
   const pads = Array.from({ length: totalPads }).map((_, i) => (projectPatterns || [])[i] || null);

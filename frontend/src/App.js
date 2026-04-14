@@ -5,188 +5,141 @@ import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import StepSequencer from "./components/StepSequencer";
 import MelodyMatrix from "./components/MelodyMatrix";
-import LivePad from "./components/LivePad"; 
+import LivePad from "./components/LivePad";
 import Community from "./components/Community";
 import "./App.css";
 
+// ─── Hash parsing (used on mount and on browser back/forward) ────────────────
+
+const parseHash = () => {
+  const hash = window.location.hash.replace("#", "");
+  const view = hash.startsWith("studio") ? "studio"
+             : hash === "auth"           ? "auth"
+             : hash === "community"      ? "community"
+             : "landing";
+  const studioView = hash.includes("/livepad")   ? "livepad"
+                   : hash.includes("/beatmaker")  ? "beatmaker"
+                   : "sequencer";
+  return { view, studioView };
+};
+
+// ─── App ─────────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const getInitialView = () => {
-    const hash = window.location.hash.replace('#', '');
-    if (hash.startsWith('studio')) return 'studio';
-    if (hash === 'auth') return 'auth';
-    if (hash === 'community') return 'community'; 
-    return 'landing';
-  };
+  const initial = parseHash();
 
-  const getInitialStudioView = () => {
-    const hash = window.location.hash.replace('#', '');
-    if (hash.includes('/beatmaker')) return 'beatmaker';
-    if (hash.includes('/livepad')) return 'livepad'; 
-    return 'sequencer'; 
-  };
+  const [currentView,      setCurrentView]      = useState(initial.view);
+  const [activeStudioView, setActiveStudioView] = useState(initial.studioView);
+  const [user,             setUser]             = useState(() => JSON.parse(localStorage.getItem("beatforge_user") || "null"));
+  const [isPlaying,        setIsPlaying]        = useState(false);
+  const [bpm,              setBpm]              = useState(120);
+  const [masterVolume,     setMasterVolume]     = useState(0.8);
+  const [stepsCount,       setStepsCount]       = useState(16);
+  const [mySamples,        setMySamples]        = useState([]);
+  const [hasActiveBeat,    setHasActiveBeat]    = useState(false);
+  const [projectPatterns,  setProjectPatterns]  = useState([]);
+  const [playbackStartTime,setPlaybackStartTime]= useState(0);
 
-  const [currentView, setCurrentView] = useState(getInitialView());
-  const [activeStudioView, setActiveStudioView] = useState(getInitialStudioView());
-  
-  const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("beatforge_user");
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const isLoggedIn = !!localStorage.getItem("beatforge_token");
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [bpm, setBpm] = useState(120);
-  const [masterVolume, setMasterVolume] = useState(0.8);
-  const [stepsCount, setStepsCount] = useState(16);
-  const [mySamples, setMySamples] = useState([]);
-  const [hasActiveBeat, setHasActiveBeat] = useState(false);
+  // ── Side-effects ────────────────────────────────────────────────────────────
 
-  const [projectPatterns, setProjectPatterns] = useState([]);
-  const [playbackStartTime, setPlaybackStartTime] = useState(0);
-
+  // Stop playback when leaving studio, or switching to livepad
   useEffect(() => {
-    if (currentView === "auth" || currentView === "community") setIsPlaying(false);
-  }, [currentView]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      setPlaybackStartTime(Date.now());
-    }
-  }, [isPlaying]);
-
-  useEffect(() => {
-    if (activeStudioView === 'livepad') {
-      setIsPlaying(false);
-    }
-  }, [activeStudioView]);
-
-  useEffect(() => {
-    let newHash = currentView;
-    if (currentView === 'studio') newHash = `studio/${activeStudioView}`;
-    if (window.location.hash !== `#${newHash}`) {
-      window.history.pushState(null, '', `#${newHash}`);
-    }
+    if (currentView === "auth" || currentView === "community" || activeStudioView === "livepad") setIsPlaying(false);
   }, [currentView, activeStudioView]);
 
+  // Record playback start time whenever play is toggled on
+  useEffect(() => { if (isPlaying) setPlaybackStartTime(Date.now()); }, [isPlaying]);
+
+  // Keep URL hash in sync with current view
   useEffect(() => {
-    const handlePopState = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash.startsWith('studio')) {
-        setCurrentView('studio');
-        if (hash.includes('/livepad')) { 
-          setActiveStudioView('livepad');
-        } else if (hash.includes('/beatmaker')) {
-          setActiveStudioView('beatmaker');
-        } else {
-          setActiveStudioView('sequencer');
-        }
-      } else if (hash === 'auth') {
-        setCurrentView('auth');
-      } else if (hash === 'community') {
-        setCurrentView('community'); 
-      } else {
-        setCurrentView('landing');
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    const newHash = currentView === "studio" ? `studio/${activeStudioView}` : currentView;
+    if (window.location.hash !== `#${newHash}`) window.history.pushState(null, "", `#${newHash}`);
+  }, [currentView, activeStudioView]);
+
+  // Handle browser back / forward
+  useEffect(() => {
+    const onPopState = () => { const { view, studioView } = parseHash(); setCurrentView(view); setActiveStudioView(studioView); };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  // 🌟 FIX 1: The old auto-redirect useEffect that forced logged-in users 
-  // away from the landing page has been removed!
+  // ── Auth handlers ───────────────────────────────────────────────────────────
 
   const handleLogin = (userData) => {
-    localStorage.setItem("beatforge_user", JSON.stringify(userData)); 
+    localStorage.setItem("beatforge_user", JSON.stringify(userData));
     setUser(userData);
-    // 🌟 FIX 2: Send the user to the landing page after a successful login
-    setCurrentView("landing"); 
+    setCurrentView("landing");
   };
 
   const handleUpgradeSuccess = () => {
     if (!user) return;
-    const upgradedUser = { ...user, isPro: true };
-    setUser(upgradedUser);
-    localStorage.setItem("beatforge_user", JSON.stringify(upgradedUser));
+    const upgraded = { ...user, isPro: true };
+    setUser(upgraded);
+    localStorage.setItem("beatforge_user", JSON.stringify(upgraded));
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("beatforge_token"); 
-    localStorage.removeItem("beatforge_user"); 
-    setUser(null);                               
-    setIsPlaying(false); 
-    setHasActiveBeat(false); 
-    setMySamples([]); 
-    setProjectPatterns([]); 
-    setCurrentView("landing");                  
+    localStorage.removeItem("beatforge_token");
+    localStorage.removeItem("beatforge_user");
+    setUser(null); setIsPlaying(false); setHasActiveBeat(false); setMySamples([]); setProjectPatterns([]);
+    setCurrentView("landing");
   };
 
-  const isLoggedIn = !!localStorage.getItem("beatforge_token");
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="app-container">
-      
+
+      {/* Mini player — shown on landing when a beat is loaded */}
       {currentView === "landing" && isLoggedIn && hasActiveBeat && (
         <div className="floating-mini-player">
           <div className="mini-player-info">
-            <div className={`status-dot ${isPlaying ? 'green' : 'red'}`}></div>
-            <span className="mini-player-text">
-              {isPlaying ? "Studio Active" : "Studio Paused"}
-            </span>
+            <div className={`status-dot ${isPlaying ? "green" : "red"}`} />
+            <span className="mini-player-text">{isPlaying ? "Studio Active" : "Studio Paused"}</span>
           </div>
-          <button 
-            className={`mini-play-btn ${isPlaying ? 'playing' : ''}`}
-            onClick={() => setIsPlaying(!isPlaying)}
-          >
+          <button className={`mini-play-btn ${isPlaying ? "playing" : ""}`} onClick={() => setIsPlaying(v => !v)}>
             {isPlaying ? "⏸" : "▶"}
           </button>
         </div>
       )}
 
-      {currentView === "landing" && (
-        <Landing 
-          onLaunch={() => setCurrentView(isLoggedIn ? "studio" : "auth")} 
-          isLoggedIn={isLoggedIn} 
-          setCurrentView={setCurrentView} 
-        />
+      {currentView === "landing"   && <Landing onLaunch={() => setCurrentView(isLoggedIn ? "studio" : "auth")} isLoggedIn={isLoggedIn} setCurrentView={setCurrentView} />}
+      {currentView === "auth"      && <Auth onLogin={handleLogin} onBack={() => setCurrentView("landing")} />}
+      {currentView === "community" && (
+        <div style={{ height: "100vh", width: "100vw", overflowY: "auto", background: "var(--bg-dark)" }}>
+          <Community currentUser={user} onNavigate={setCurrentView} />
+        </div>
       )}
 
-      {currentView === "auth" && (
-        <Auth onLogin={handleLogin} onBack={() => setCurrentView("landing")} />
-      )}
-
-      <div 
-        className="studio-master-container"
-        style={{ 
-          display: currentView === "studio" ? "flex" : "none", 
-          flexDirection: "column", height: "100vh", width: "100vw" 
-        }}
-      >
-        <TopBar 
-          setCurrentView={setCurrentView} activeView={currentView} isPlaying={isPlaying} setIsPlaying={setIsPlaying} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} setMasterVolume={setMasterVolume} onLogout={handleLogout} currentUser={user} stepsCount={stepsCount} 
-          onUpgradeSuccess={handleUpgradeSuccess} 
+      {/* Studio — always mounted, hidden when not active (preserves sequencer state) */}
+      <div className="studio-master-container" style={{ display: currentView === "studio" ? "flex" : "none", flexDirection: "column", height: "100vh", width: "100vw" }}>
+        <TopBar
+          setCurrentView={setCurrentView} activeView={currentView}
+          isPlaying={isPlaying} setIsPlaying={setIsPlaying}
+          bpm={bpm} setBpm={setBpm}
+          masterVolume={masterVolume} setMasterVolume={setMasterVolume}
+          onLogout={handleLogout} currentUser={user}
+          stepsCount={stepsCount} onUpgradeSuccess={handleUpgradeSuccess}
         />
-        
-        <div className="main-workspace" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="main-workspace" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
           <Sidebar setCurrentView={setCurrentView} activeStudioView={activeStudioView} setActiveStudioView={setActiveStudioView} mySamples={mySamples} setMySamples={setMySamples} currentUser={user} />
-          
-          <div className="sequencer-wrapper" style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
+          <div className="sequencer-wrapper" style={{ flex: 1, padding: 20, overflowY: "auto" }}>
             <div style={{ display: activeStudioView === "sequencer" ? "block" : "none" }}>
               <StepSequencer isPlaying={isPlaying} activeStudioView={activeStudioView} playbackStartTime={playbackStartTime} bpm={bpm} setBpm={setBpm} masterVolume={masterVolume} currentUser={user} setHasActiveBeat={setHasActiveBeat} stepsCount={stepsCount} setStepsCount={setStepsCount} mySamples={mySamples} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} />
             </div>
-            <div style={{ display: activeStudioView === "beatmaker" ? "block" : "none", height: '100%' }}>
+            <div style={{ display: activeStudioView === "beatmaker" ? "block" : "none", height: "100%" }}>
               <MelodyMatrix isPlaying={isPlaying} activeStudioView={activeStudioView} playbackStartTime={playbackStartTime} bpm={bpm} stepsCount={stepsCount} setHasActiveBeat={setHasActiveBeat} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} currentUser={user} />
             </div>
-            <div style={{ display: activeStudioView === "livepad" ? "block" : "none", height: '100%' }}>
-              <LivePad projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} isPlaying={isPlaying} activeStudioView={activeStudioView} bpm={bpm} playbackStartTime={playbackStartTime} currentUser={user} />
+            <div style={{ display: activeStudioView === "livepad" ? "block" : "none", height: "100%" }}>
+              <LivePad masterVolume={masterVolume} projectPatterns={projectPatterns} setProjectPatterns={setProjectPatterns} isPlaying={isPlaying} activeStudioView={activeStudioView} bpm={bpm} playbackStartTime={playbackStartTime} currentUser={user} />
             </div>
           </div>
         </div>
       </div>
-
-      {currentView === "community" && (
-        <div style={{ height: '100vh', width: '100vw', overflowY: 'auto', background: 'var(--bg-dark)' }}>
-          <Community currentUser={user} onNavigate={setCurrentView} />
-        </div>
-      )}
 
     </div>
   );
