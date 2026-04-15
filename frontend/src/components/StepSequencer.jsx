@@ -16,7 +16,7 @@ const DRUM_KITS = [
   { name: "USER KIT",      proOnly: true, sounds: [{ name: "Custom Kick", file: "/sounds/kick.wav" }] },
 ];
 
-// ─── SVG icon map — avoids repeating verbose markup inline ───────────────────
+// ─── SVG icon map ────────────────────────────────────────────────────────────
 
 const Svg = (paths, extra) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...extra}>{paths}</svg>;
 const Icon = {
@@ -33,13 +33,18 @@ const Icon = {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-const initKits = (kits, steps = 16) =>
-  kits.map(kit => ({
-    ...kit,
-    grid:        kit.grid        || Array.from({ length: kit.sounds.length }, () => Array(steps).fill(false)),
-    volumes:     kit.volumes     || Array(kit.sounds.length).fill(1),
-    mutedTracks: kit.mutedTracks || Array(kit.sounds.length).fill(false),
-  }));
+// 🌟 FIX: StepsCount is now tracked permanently inside each kit's isolated memory
+const initKits = (kits, defaultSteps = 16) =>
+  kits.map(kit => {
+    const st = kit.stepsCount || defaultSteps;
+    return {
+      ...kit,
+      stepsCount:  st,
+      grid:        kit.grid        || Array.from({ length: kit.sounds.length }, () => Array(st).fill(false)),
+      volumes:     kit.volumes     || Array(kit.sounds.length).fill(1),
+      mutedTracks: kit.mutedTracks || Array(kit.sounds.length).fill(false),
+    };
+  });
 
 const loadSession = () => { try { return JSON.parse(localStorage.getItem("beatforge_seq_session") || "{}"); } catch { return {}; } };
 
@@ -64,7 +69,7 @@ export default function StepSequencer({
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [isLoaded,            setIsLoaded]            = useState(false);
-  const [kits,                setKits]                = useState(() => initKits(s0.kits || DRUM_KITS, s0.stepsCount || 16));
+  const [kits,                setKits]                = useState(() => initKits(s0.kits || DRUM_KITS, 16));
   const [currentKitIndex,     setCurrentKitIndex]     = useState(() => s0.kitIndex ?? 0);
   const [currentStep,         setCurrentStep]         = useState(0);
   const [showMixer,           setShowMixer]           = useState(false);
@@ -80,6 +85,7 @@ export default function StepSequencer({
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const currentKit     = kits[currentKitIndex] || kits[0];
+  const kitSteps       = currentKit.stepsCount || 16;
   const currentSounds  = useMemo(() => currentKit.sounds || [],      [currentKit.sounds]);
   const grid           = useMemo(() => currentKit.grid || [],        [currentKit.grid]);
   const volumes        = useMemo(() => currentKit.volumes || [],     [currentKit.volumes]);
@@ -99,7 +105,7 @@ export default function StepSequencer({
   const lastStepRef    = useRef(-1);
   const activeNodes    = useRef([]);
   const prevBpmRef     = useRef(bpm);
-  const prevStepsRef   = useRef(stepsCount);
+  const prevStepsRef   = useRef(kitSteps);
   const vStartRef      = useRef(0);
   const buffersRef     = useRef({});
   const prevUserRef    = useRef(currentUser);
@@ -107,16 +113,31 @@ export default function StepSequencer({
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  /** Immutably patch the current kit. */
   const updateKit = (fn) =>
     setKits(prev => { const c = [...prev]; c[currentKitIndex] = fn({ ...c[currentKitIndex] }); return c; });
 
-  /** Flash a status value, then reset to "idle". */
   const flash = (set, val, ms = 2000) => { set(val); setTimeout(() => set("idle"), ms); };
 
-  /** Append a new sound row to the current kit. */
   const addSound = (sound) =>
-    updateKit(k => ({ ...k, sounds: [...k.sounds, sound], grid: [...k.grid, Array(Number(stepsCount)).fill(false)], volumes: [...k.volumes, 1], mutedTracks: [...k.mutedTracks, false] }));
+    updateKit(k => ({ ...k, sounds: [...k.sounds, sound], grid: [...k.grid, Array(k.stepsCount || 16).fill(false)], volumes: [...k.volumes, 1], mutedTracks: [...k.mutedTracks, false] }));
+
+  // 🌟 FIX: Kit change tells the master app which step count is currently active
+  const handleKitChange = (direction) => {
+    const newIdx = direction === -1 ? (currentKitIndex === 0 ? kits.length - 1 : currentKitIndex - 1) : (currentKitIndex + 1) % kits.length;
+    setCurrentKitIndex(newIdx);
+    if (setStepsCount) setStepsCount(kits[newIdx].stepsCount || 16);
+  };
+
+  // 🌟 FIX: Knob explicitly resizes only the CURRENT kit, not all of them
+  const handleStepsChange = (val) => {
+    const n = Number(val);
+    if (setStepsCount) setStepsCount(n);
+    updateKit(k => ({ 
+      ...k, 
+      stepsCount: n, 
+      grid: k.grid.map(r => { const row = r || []; if (row.length < n) return [...row, ...Array(n - row.length).fill(false)]; if (row.length > n) return row.slice(0, n); return row; }) 
+    }));
+  };
 
   // ── Sync refs ──────────────────────────────────────────────────────────────
   useEffect(() => { gridRef.current = grid; volumeRef.current = volumes; mutedRef.current = mutedTracks; soundsRef.current = currentSounds; },
@@ -126,8 +147,10 @@ export default function StepSequencer({
   useEffect(() => {
     const s = loadSession();
     if (s.bpm) setBpm(s.bpm);
-    if (s.stepsCount) setStepsCount(s.stepsCount);
-    if (s.kits && setHasActiveBeat) { const k = s.kits[s.kitIndex || 0]; if (k.grid?.some(r => r?.some(Boolean))) setHasActiveBeat(true); }
+    const kIdx = s.kitIndex ?? 0;
+    const loadedSteps = s.kits?.[kIdx]?.stepsCount || 16;
+    if (setStepsCount) setStepsCount(loadedSteps);
+    if (s.kits && setHasActiveBeat) { const k = s.kits[kIdx]; if (k.grid?.some(r => r?.some(Boolean))) setHasActiveBeat(true); }
     setTimeout(() => setIsLoaded(true), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -135,25 +158,19 @@ export default function StepSequencer({
   // ── Persist session ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isLoaded) return;
-    try { localStorage.setItem("beatforge_seq_session", JSON.stringify({ bpm, stepsCount: Number(stepsCount), kitIndex: currentKitIndex, kits })); }
-    catch { try { const light = kits.map(k => ({ ...k, sounds: k.sounds.map(s => s.file?.length > 500 ? { ...s, file: null, name: s.name + " (Unsaved)" } : s) })); localStorage.setItem("beatforge_seq_session", JSON.stringify({ bpm, stepsCount: Number(stepsCount), kitIndex: currentKitIndex, kits: light })); } catch {} }
-  }, [bpm, stepsCount, currentKitIndex, kits, isLoaded]);
+    try { localStorage.setItem("beatforge_seq_session", JSON.stringify({ bpm, kitIndex: currentKitIndex, kits })); }
+    catch { try { const light = kits.map(k => ({ ...k, sounds: k.sounds.map(s => s.file?.length > 500 ? { ...s, file: null, name: s.name + " (Unsaved)" } : s) })); localStorage.setItem("beatforge_seq_session", JSON.stringify({ bpm, kitIndex: currentKitIndex, kits: light })); } catch {} }
+  }, [bpm, currentKitIndex, kits, isLoaded]);
 
   // ── Reset when user changes ────────────────────────────────────────────────
   useEffect(() => {
     if (!isLoaded || currentUser?._id === prevUserRef.current?._id) { prevUserRef.current = currentUser; return; }
-    setKits(initKits(DRUM_KITS, Number(stepsCount))); setCurrentKitIndex(0); setCurrentStep(0); lastStepRef.current = -1; setShowMixer(false);
+    setKits(initKits(DRUM_KITS, 16)); setCurrentKitIndex(0); setCurrentStep(0); lastStepRef.current = -1; setShowMixer(false);
     if (setHasActiveBeat) setHasActiveBeat(false);
+    if (setStepsCount) setStepsCount(16);
     localStorage.removeItem("beatforge_seq_session"); prevUserRef.current = currentUser;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isLoaded]);
-
-  // ── Resize grid on stepsCount change ──────────────────────────────────────
-  useEffect(() => {
-    if (!isLoaded) return;
-    const n = Number(stepsCount);
-    setKits(prev => prev.map(k => ({ ...k, grid: k.grid.map(row => { const r = row || []; if (r.length < n) return [...r, ...Array(n - r.length).fill(false)]; if (r.length > n) return r.slice(0, n); return r; }) })));
-  }, [stepsCount, isLoaded]);
 
   // ── Preload audio ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -188,7 +205,7 @@ export default function StepSequencer({
 
   // ── Playback scheduler ────────────────────────────────────────────────────
   useEffect(() => {
-    const numSteps = Number(stepsCount);
+    const numSteps = kitSteps;
     if (!isCurrentlyPlaying || !playbackStartTime) { clearTimeout(intervalRef.current); setCurrentStep(0); lastStepRef.current = -1; vStartRef.current = 0; return; }
     if (Date.now() - playbackStartTime > 500 && lastStepRef.current === -1) return;
 
@@ -223,7 +240,7 @@ export default function StepSequencer({
     };
     tick(); return () => clearTimeout(intervalRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCurrentlyPlaying, playbackStartTime, bpm, stepsCount, currentKitIndex, isLocked]);
+  }, [isCurrentlyPlaying, playbackStartTime, bpm, kitSteps, currentKitIndex, isLocked]);
 
   // Close context menu on outside click
   useEffect(() => { const close = () => setContextMenu(p => ({ ...p, visible: false })); document.addEventListener("click", close); return () => document.removeEventListener("click", close); }, []);
@@ -242,16 +259,18 @@ export default function StepSequencer({
     if (!currentUser)       { flash(setPresetSaveStatus, "no_user"); return; }
     try {
       const token = localStorage.getItem("beatforge_token");
-      const res = await fetch("http://localhost:5000/api/presets", { method: "POST", headers: { "Content-Type": "application/json", "x-auth-token": token }, body: JSON.stringify({ name: presetName, bpm, stepsCount: Number(stepsCount), grid, volumes, mutedTracks, kitIndex: currentKitIndex, sounds: soundsRef.current }) });
+      const res = await fetch("http://localhost:5000/api/presets", { method: "POST", headers: { "Content-Type": "application/json", "x-auth-token": token }, body: JSON.stringify({ name: presetName, bpm, stepsCount: kitSteps, grid, volumes, mutedTracks, kitIndex: currentKitIndex, sounds: soundsRef.current }) });
       if (res.ok) { const saved = await res.json(); setPresets(p => [saved, ...p]); setPresetName(""); flash(setPresetSaveStatus, "saved"); } else flash(setPresetSaveStatus, "error");
     } catch { flash(setPresetSaveStatus, "error"); }
   };
 
   const loadPreset = (preset) => {
     if (!preset) return;
-    setBpm(preset.bpm); setStepsCount(Number(preset.stepsCount) || 16);
+    setBpm(preset.bpm); 
+    const n = Number(preset.stepsCount) || 16;
+    if (setStepsCount) setStepsCount(n);
     const idx = preset.kitIndex ?? 0;
-    setKits(prev => { const c = [...prev], k = { ...c[idx] }; if (preset.sounds?.length) k.sounds = preset.sounds; k.grid = preset.grid || k.sounds.map(() => Array(Number(preset.stepsCount) || 16).fill(false)); k.volumes = preset.volumes || k.sounds.map(() => 1); k.mutedTracks = preset.mutedTracks || k.sounds.map(() => false); c[idx] = k; return c; });
+    setKits(prev => { const c = [...prev], k = { ...c[idx] }; if (preset.sounds?.length) k.sounds = preset.sounds; k.stepsCount = n; k.grid = preset.grid || k.sounds.map(() => Array(n).fill(false)); k.volumes = preset.volumes || k.sounds.map(() => 1); k.mutedTracks = preset.mutedTracks || k.sounds.map(() => false); c[idx] = k; return c; });
     setCurrentKitIndex(idx); if (setHasActiveBeat) setHasActiveBeat(true);
   };
 
@@ -266,9 +285,9 @@ export default function StepSequencer({
 
   const updateStep = (row, step, value) => {
     if (isLocked) return; if (setHasActiveBeat) setHasActiveBeat(true);
-    updateKit(k => { const g = k.grid.map(r => [...(r || [])]); if (!g[row]) g[row] = Array(Number(stepsCount)).fill(false); g[row][step] = value; return { ...k, grid: g }; });
+    updateKit(k => { const g = k.grid.map(r => [...(r || [])]); if (!g[row]) g[row] = Array(k.stepsCount || 16).fill(false); g[row][step] = value; return { ...k, grid: g }; });
   };
-  const clearBeat = () => { updateKit(k => ({ ...k, grid: k.grid.map(() => Array(Number(stepsCount)).fill(false)) })); setCurrentStep(0); lastStepRef.current = -1; if (setHasActiveBeat) setHasActiveBeat(false); };
+  const clearBeat = () => { updateKit(k => ({ ...k, grid: k.grid.map(() => Array(k.stepsCount || 16).fill(false)) })); setCurrentStep(0); lastStepRef.current = -1; if (setHasActiveBeat) setHasActiveBeat(false); };
   const fillSteps = (row, interval, start) => { if (isLocked) return; updateKit(k => { const g = k.grid.map(r => [...(r||[])]); if (g[row]) g[row] = g[row].map((_, i) => i >= start && (i - start) % interval === 0); return { ...k, grid: g }; }); if (setHasActiveBeat) setHasActiveBeat(true); };
   const clearTrack = (row) => { if (isLocked) return; updateKit(k => { const g = k.grid.map(r => [...(r||[])]); if (g[row]) g[row] = g[row].map(() => false); return { ...k, grid: g }; }); };
   const deleteTrack = (row) => { if (currentSounds.length <= 1) return; updateKit(k => ({ ...k, sounds: k.sounds.filter((_, i) => i !== row), grid: k.grid.filter((_, i) => i !== row), volumes: k.volumes.filter((_, i) => i !== row), mutedTracks: k.mutedTracks.filter((_, i) => i !== row) })); };
@@ -288,7 +307,7 @@ export default function StepSequencer({
   const initiateSaveToLivePad = () => { if (isLocked) { setShowProModal(true); return; } if (!gridRef.current.some(r => r?.some(Boolean))) { flash(setSaveStatus, "empty"); return; } setLivePadName(`Drums ${drumCount() + 1}`); setShowLivePadModal(true); };
   const confirmSaveToLivePad = () => {
     const name = livePadName.trim() || `Drums ${drumCount() + 1}`;
-    const pattern = { id: `drum-${Date.now()}`, type: "drum", name, stepsCount: Number(stepsCount), data: { grid: gridRef.current.map(r => [...(r||[])]), volumes: [...volumeRef.current], kitIndex: currentKitIndex, sounds: soundsRef.current } };
+    const pattern = { id: `drum-${Date.now()}`, type: "drum", name, stepsCount: kitSteps, data: { grid: gridRef.current.map(r => [...(r||[])]), volumes: [...volumeRef.current], kitIndex: currentKitIndex, sounds: soundsRef.current } };
     if (setProjectPatterns) { setProjectPatterns(p => [...(p || []), pattern]); flash(setSaveStatus, "saved"); } setShowLivePadModal(false);
   };
 
@@ -302,7 +321,6 @@ export default function StepSequencer({
 
   return (
     <>
-      {/* Live Pad naming modal */}
       {showLivePadModal && (
         <Modal>
           <div style={{ fontSize: 45, marginBottom: 10 }}>🎛️</div>
@@ -315,7 +333,6 @@ export default function StepSequencer({
         </Modal>
       )}
 
-      {/* Pro upsell modal */}
       {showProModal && (
         <Modal>
           <div style={{ fontSize: 45, marginBottom: 10 }}>👑</div>
@@ -325,7 +342,6 @@ export default function StepSequencer({
         </Modal>
       )}
 
-      {/* Delete preset confirmation */}
       {presetToDeleteIndex !== null && presets[presetToDeleteIndex] && (
         <Modal>
           <div style={{ fontSize: 45, marginBottom: 10 }}>⚠️</div>
@@ -340,7 +356,6 @@ export default function StepSequencer({
 
       <div className="sequencer" onContextMenu={e => e.preventDefault()}>
 
-        {/* Top bar */}
         <div className="preset-bar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
 
           <div className="sequencer-header">
@@ -352,9 +367,9 @@ export default function StepSequencer({
           <div className="hardware-panel">
             <div className="panel-label">SOUNDBANK</div>
             <div className="panel-controls">
-              <button className="panel-btn" onClick={() => setCurrentKitIndex(p => (p - 1 + kits.length) % kits.length)}>{Icon.prev}</button>
+              <button className="panel-btn" onClick={() => handleKitChange(-1)}>{Icon.prev}</button>
               <div className="led-input" style={{ width: 150, textAlign: "center", userSelect: "none", color: "#00e676", textShadow: "0 0 5px rgba(0,230,118,0.5)" }}>{currentKit.name} {currentKit.proOnly && "👑"}</div>
-              <button className="panel-btn" onClick={() => setCurrentKitIndex(p => (p + 1) % kits.length)}>{Icon.next}</button>
+              <button className="panel-btn" onClick={() => handleKitChange(1)}>{Icon.next}</button>
             </div>
           </div>
 
@@ -378,7 +393,7 @@ export default function StepSequencer({
           <div className="hardware-panel">
             <div className="panel-label">TOOLS</div>
             <div className="panel-controls grid-tools-group">
-              <Knob label="STEPS" value={stepsCount} min={8} max={32} step={1} onChange={setStepsCount} />
+              <Knob label="STEPS" value={kitSteps} min={8} max={32} step={1} onChange={handleStepsChange} />
               <div className="panel-divider" />
               <div className="trigger-pad-wrapper">
                 <div className="knob-label" style={{ color: "#ff4757" }}>CLEAR</div>
@@ -396,7 +411,6 @@ export default function StepSequencer({
           </div>
         </div>
 
-        {/* Grid / Mixer area */}
         <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: isLocked ? 250 : "auto" }}>
           {isLocked && (
             <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(5px)", zIndex: 50, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: 8, border: "1px solid rgba(255,215,0,0.2)" }}>
@@ -421,7 +435,7 @@ export default function StepSequencer({
                       </div>
                     </div>
                     <div className="steps" onMouseUp={() => (dragMode.current = null)} onMouseLeave={() => (dragMode.current = null)}>
-                      {(grid[rowIndex] || Array(Number(stepsCount)).fill(false)).map((active, stepIndex) => (
+                      {(grid[rowIndex] || Array(kitSteps).fill(false)).map((active, stepIndex) => (
                         <div key={stepIndex}
                           className={`step ${active ? "active" : ""} ${currentStep === stepIndex ? "current" : ""} ${Math.floor(stepIndex / 4) % 2 === 1 ? "alt-group" : ""}`}
                           onMouseDown={e  => { isDraggingRef.current = false; dragMode.current = e.button === 2 ? "erase" : "paint"; updateStep(rowIndex, stepIndex, e.button !== 2); }}
@@ -439,7 +453,6 @@ export default function StepSequencer({
           )}
         </div>
 
-        {/* Add tracks */}
         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
           <input type="file" accept=".wav,.mp3,.ogg,audio/wav,audio/mpeg,audio/ogg" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
           <button className="panel-btn" onClick={() => currentUser?.isPro ? fileInputRef.current.click() : setShowProModal(true)} style={{ flex: 1, padding: 12, borderStyle: "dashed", borderColor: "rgba(255,255,255,0.2)", justifyContent: "center", letterSpacing: 2, color: "var(--text-muted)" }}>
@@ -452,7 +465,6 @@ export default function StepSequencer({
           </select>
         </div>
 
-        {/* Context menu */}
         {contextMenu.visible && (
           <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={e => e.stopPropagation()}>
             {[2, 4, 8].map(n => <div key={n} className="context-item" onClick={() => { fillSteps(contextMenu.rowIndex, n, contextMenu.startStep); setContextMenu(c => ({ ...c, visible: false })); }}>Fill every {n} steps</div>)}
