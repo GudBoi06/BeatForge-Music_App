@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { audioCtx, masterGain } from "../utils/audioEngine";
 import "../styles/pianoroll.css";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 const ALL_NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 
 const SCALES = {
@@ -26,8 +24,6 @@ const SNAP_OPTIONS = [
 
 const TICKS_PER_BEAT = 48;
 
-// ─── Session helpers ──────────────────────────────────────────────────────────
-
 const SESSION_KEY = "beatforge_melody_session";
 
 const loadSession = () => {
@@ -38,8 +34,6 @@ const fromSession = (key, fallback) => {
   const s = loadSession();
   return s[key] !== undefined ? s[key] : fallback;
 };
-
-// ─── Inline styles ────────────────────────────────────────────────────────────
 
 const TOOLBAR_STYLES = `
   .custom-zoom-slider{-webkit-appearance:none;width:80px;background:transparent}
@@ -62,7 +56,7 @@ const TOOLBAR_STYLES = `
   .roll-container::-webkit-scrollbar-thumb:hover{background:#777}
 `;
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+//  Sub-components
 
 function SaveModal({ name, setName, onConfirm, onCancel }) {
   return (
@@ -161,7 +155,7 @@ export default function MelodyMatrix({
   const totalBeats = Number(stepsCount) / 4;
   const isCurrentlyPlaying = isPlaying && (activeStudioView === "beatmaker" || activeStudioView === "sequencer");
 
-  // ── Derived note grid ──────────────────────────────────────────────────────
+  //  Derived note grid 
 
   const allGridNotes = useMemo(() => {
     const arr = [];
@@ -180,13 +174,12 @@ export default function MelodyMatrix({
     return arr;
   }, [rootNote, scaleType]);
 
-  // ── Sync refs ──────────────────────────────────────────────────────────────
+  //  Sync refs
 
   useEffect(() => { notesRef.current     = notes;        }, [notes]);
   useEffect(() => { scaleNotesRef.current = allGridNotes; }, [allGridNotes]);
 
-  // ── Init from session ──────────────────────────────────────────────────────
-
+  //  Init from session
   useEffect(() => {
     const s = loadSession();
     if (s.bpm        && setBpm)           setBpm(s.bpm);
@@ -203,8 +196,7 @@ export default function MelodyMatrix({
     localStorage.setItem(SESSION_KEY, JSON.stringify({ notes, rootNote, scaleType, gridSnap, bpm, stepsCount }));
   }, [notes, rootNote, scaleType, gridSnap, bpm, stepsCount, isLoaded]);
 
-  // ── Close snap dropdown on outside click ──────────────────────────────────
-
+  //  Close snap dropdown on outside click 
   useEffect(() => {
     const onDown = e => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsSnapOpen(false); };
     const onUp   = ()  => { dragMode.current = null; resizeNoteId.current = null; };
@@ -213,8 +205,7 @@ export default function MelodyMatrix({
     return () => { document.removeEventListener("mousedown", onDown); window.removeEventListener("mouseup", onUp); };
   }, []);
 
-  // ── Stop audio when playback stops ────────────────────────────────────────
-
+  //  Stop audio when playback stops 
   useEffect(() => {
     if (!isCurrentlyPlaying) {
       activeNodesRef.current.forEach(n => { try { n.stop(); } catch {} });
@@ -222,8 +213,7 @@ export default function MelodyMatrix({
     }
   }, [isCurrentlyPlaying]);
 
-  // ── Audio synthesis ────────────────────────────────────────────────────────
-
+  // Audio synthesis
   const playSynthNote = (freq, durationInSeconds) => {
     if (!audioCtx) return;
     if (audioCtx.state === "suspended") audioCtx.resume();
@@ -255,8 +245,7 @@ export default function MelodyMatrix({
     osc.onended = () => { activeNodesRef.current = activeNodesRef.current.filter(n => n !== osc); };
   };
 
-  // ── Playback scheduler ─────────────────────────────────────────────────────
-
+  // Playback scheduler 
   useEffect(() => {
     const numericSteps = Number(stepsCount);
 
@@ -338,8 +327,7 @@ export default function MelodyMatrix({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCurrentlyPlaying, playbackStartTime, bpm, totalBeats, stepsCount]);
 
-  // ── Grid interactions ──────────────────────────────────────────────────────
-
+  //  Grid interactions 
   const handleGridClick = (row, startBeat) => {
     if (setHasActiveBeat) setHasActiveBeat(true);
     const newEnd = startBeat + gridSnap;
@@ -403,8 +391,6 @@ export default function MelodyMatrix({
     }
     setShowModal(false);
   };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   const gridColumns = Math.round(totalBeats / gridSnap);
   const saveBtnBg   = saveStatus === "empty" ? "#ff4757" : saveStatus === "saved" ? "#00e676" : "var(--accent)";

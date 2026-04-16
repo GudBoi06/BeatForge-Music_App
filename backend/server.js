@@ -14,7 +14,7 @@ const User     = require("./models/User");
 const Contact  = require("./models/Contact");
 const Feedback = require("./models/Feedback");
 
-/* ─── APP SETUP ─────────────────────────────────────────────── */
+// APP SETUP 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
@@ -36,10 +36,10 @@ const upload = multer({
   }),
 });
 
-/* ─── HELPERS ───────────────────────────────────────────────── */
+// HELPERS
 const err500 = (res, e, msg = "Server Error") => { console.error(msg, e); res.status(500).send(msg); };
 
-/* ─── SAMPLE ROUTES ─────────────────────────────────────────── */
+// SAMPLE ROUTES
 app.post("/api/samples", auth, upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ msg: "No file uploaded" });
@@ -73,7 +73,7 @@ app.delete("/api/samples/:id", auth, async (req, res) => {
   } catch (e) { err500(res, e, "Delete sample error"); }
 });
 
-/* ─── LANDING PAGE FORMS ─────────────────────────────────────── */
+// LANDING PAGE FORMS
 app.post("/api/contact", async (req, res) => {
   try {
     await Contact.create(req.body);
@@ -88,7 +88,7 @@ app.post("/api/feedback", async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, msg: "Server Error" }); }
 });
 
-/* ─── RAZORPAY ROUTES ────────────────────────────────────────── */
+// RAZORPAY ROUTES
 app.post("/api/create-razorpay-order", auth, async (req, res) => {
   try {
     const order = await razorpay.orders.create({ amount: 49900, currency: "INR", receipt: `receipt_${Date.now()}` });
@@ -113,6 +113,6 @@ app.post("/api/verify-payment", auth, async (req, res) => {
   } catch (e) { err500(res, e, "Payment Verification Error"); }
 });
 
-/* ─── START ──────────────────────────────────────────────────── */
+// START SERVER
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🎧 BeatForge Backend running on port ${PORT}`));

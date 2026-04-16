@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import "../styles/landing.css";
 
-// ── DATA ──────────────────────────────────────────────────────
+// DATA 
 
 const FAQ_ITEMS = [
   { q: "Is BeatForge completely free to use?", a: "Yes, the core studio is free forever. Unlock advanced features like audio exports and custom samples with a one-time BeatForge Pro license." },
@@ -29,7 +29,7 @@ const CONTACT_CHANNELS = [
 const FEEDBACK_CATEGORIES = ["Overall Experience","Step Sequencer","Live Pad","Melody Maker","UI / Design","Performance"];
 const CONTACT_SUBJECTS    = ["General Inquiry","Bug Report","Feature Request","Account & Billing","Other"];
 
-// ── SVG ICONS ─────────────────────────────────────────────────
+// SVG ICONS
 
 const ICONS = {
   sequencer: <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="8" width="3" height="8" rx="1"/><rect x="7" y="5" width="3" height="11" rx="1"/><rect x="12" y="8" width="3" height="8" rx="1"/><rect x="17" y="3" width="3" height="13" rx="1"/></svg>,
@@ -49,7 +49,7 @@ const ICONS = {
   chevron:   <svg className="faq-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
 };
 
-// ── HELPERS ───────────────────────────────────────────────────
+// HELPERS 
 
 function scrollTo(id) {
   const el = document.getElementById(id);
@@ -62,7 +62,7 @@ function postJson(url, body) {
   return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
 
-// ── SHARED SMALL COMPONENTS ────────────────────────────────────
+// SHARED SMALL COMPONENTS
 
 function WaveBars({ count = 12, color = "var(--bf-accent)" }) {
   return (
@@ -85,18 +85,16 @@ function Section({ id, children, className = "" }) {
   return <section id={id} ref={ref} className={`bf-section ${className} ${visible ? "bf-section--visible" : ""}`}>{children}</section>;
 }
 
-function SuccessBanner({ icon, title, subtitle }) {
+function SuccessBanner({ title, subtitle }) {
   return (
     <div className="form-success">
-      {icon}
       <h3>{title}</h3>
       <p>{subtitle}</p>
     </div>
   );
 }
 
-// ── FAQ ITEM ──────────────────────────────────────────────────
-
+// FAQ ITEM 
 function FaqItem({ item, open, onToggle }) {
   return (
     <div className={`faq-item ${open ? "faq-item--open" : ""}`} onClick={onToggle}>
@@ -106,8 +104,7 @@ function FaqItem({ item, open, onToggle }) {
   );
 }
 
-// ── CONTACT FORM ──────────────────────────────────────────────
-
+//  CONTACT FORM 
 function ContactForm() {
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
   const [sent, setSent] = useState(false);
@@ -145,8 +142,7 @@ function ContactForm() {
   );
 }
 
-// ── FEEDBACK FORM ─────────────────────────────────────────────
-
+// ─FEEDBACK FORM 
 function FeedbackForm() {
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
@@ -193,7 +189,7 @@ function FeedbackForm() {
   );
 }
 
-// ── HERO MOCKUP ───────────────────────────────────────────────
+// HERO MOCKUP
 
 const GRID_PATTERNS = {
   KICK:   [0,4,8,12],
@@ -239,7 +235,7 @@ function HeroMockup() {
   );
 }
 
-// ── MAIN LANDING PAGE ─────────────────────────────────────────
+//  MAIN LANDING PAGE 
 
 const NAV_LINKS = [
   { label: "Features", id: "features" },

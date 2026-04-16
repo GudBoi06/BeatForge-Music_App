@@ -40,7 +40,6 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
     }
   }, [isCurrentlyPlaying]);
 
-  // 🌟 FIX: Wake the GLOBAL Audio Context, not a separate local one
   useEffect(() => {
     const wakeAudio = () => {
       if (audioCtx?.state === "suspended") audioCtx.resume();
@@ -112,7 +111,6 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
     gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + Math.max(0, durationInSeconds - 0.05)); 
     gainNode.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + durationInSeconds); 
 
-    // 🌟 FIX: Route synths directly into the masterGain instead of the hardware destination
     osc.connect(filter); filter.connect(gainNode); gainNode.connect(masterGain); 
     
     osc.start(); 
@@ -209,7 +207,6 @@ export default function LivePad({ projectPatterns = [], setProjectPatterns, isPl
                     const audio = audioPlayersRef.current[soundFile];
                     if (audio) {
                       audio.currentTime = 0;
-                      // 🌟 FIX: Multiply the track volume by the Master Volume to enforce scaling!
                       const trackVol = pattern.data.volumes[rowIndex] !== undefined ? pattern.data.volumes[rowIndex] : 1;
                       audio.volume = Math.min(1, Math.max(0, trackVol * masterVolume));
                       audio.play().catch(e => {});
