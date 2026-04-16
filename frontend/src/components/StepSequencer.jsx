@@ -33,7 +33,6 @@ const Icon = {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-// 🌟 FIX: StepsCount is now tracked permanently inside each kit's isolated memory
 const initKits = (kits, defaultSteps = 16) =>
   kits.map(kit => {
     const st = kit.stepsCount || defaultSteps;
@@ -48,8 +47,6 @@ const initKits = (kits, defaultSteps = 16) =>
 
 const loadSession = () => { try { return JSON.parse(localStorage.getItem("beatforge_seq_session") || "{}"); } catch { return {}; } };
 
-// ─── Reusable modal overlay ───────────────────────────────────────────────────
-
 const Modal = ({ children }) => (
   <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999, backdropFilter: "blur(4px)" }}>
     <div style={{ background: "#111", padding: 30, borderRadius: 12, border: "1px solid #333", textAlign: "center", maxWidth: 350, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.8)" }}>
@@ -58,8 +55,6 @@ const Modal = ({ children }) => (
   </div>
 );
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function StepSequencer({
   isPlaying, activeStudioView, playbackStartTime, bpm, setBpm,
   currentUser, setHasActiveBeat, stepsCount, setStepsCount,
@@ -67,7 +62,7 @@ export default function StepSequencer({
 }) {
   const s0 = loadSession();
 
-  // ── State ──────────────────────────────────────────────────────────────────
+  // State 
   const [isLoaded,            setIsLoaded]            = useState(false);
   const [kits,                setKits]                = useState(() => initKits(s0.kits || DRUM_KITS, 16));
   const [currentKitIndex,     setCurrentKitIndex]     = useState(() => s0.kitIndex ?? 0);
@@ -83,7 +78,7 @@ export default function StepSequencer({
   const [presetToDeleteIndex, setPresetToDeleteIndex] = useState(null);
   const [contextMenu,         setContextMenu]         = useState({ visible: false, x: 0, y: 0, rowIndex: null, startStep: 0 });
 
-  // ── Derived ────────────────────────────────────────────────────────────────
+  // Derived 
   const currentKit     = kits[currentKitIndex] || kits[0];
   const kitSteps       = currentKit.stepsCount || 16;
   const currentSounds  = useMemo(() => currentKit.sounds || [],      [currentKit.sounds]);
@@ -93,7 +88,7 @@ export default function StepSequencer({
   const isLocked       = currentKit?.proOnly && !currentUser?.isPro;
   const isCurrentlyPlaying = isPlaying && (activeStudioView === "sequencer" || activeStudioView === "beatmaker");
 
-  // ── Refs ───────────────────────────────────────────────────────────────────
+  //  Refs 
   const gridRef        = useRef(grid);
   const volumeRef      = useRef(volumes);
   const mutedRef       = useRef(mutedTracks);
@@ -111,8 +106,6 @@ export default function StepSequencer({
   const prevUserRef    = useRef(currentUser);
   const prevSamplesRef = useRef(mySamples);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
   const updateKit = (fn) =>
     setKits(prev => { const c = [...prev]; c[currentKitIndex] = fn({ ...c[currentKitIndex] }); return c; });
 
@@ -121,14 +114,12 @@ export default function StepSequencer({
   const addSound = (sound) =>
     updateKit(k => ({ ...k, sounds: [...k.sounds, sound], grid: [...k.grid, Array(k.stepsCount || 16).fill(false)], volumes: [...k.volumes, 1], mutedTracks: [...k.mutedTracks, false] }));
 
-  // 🌟 FIX: Kit change tells the master app which step count is currently active
   const handleKitChange = (direction) => {
     const newIdx = direction === -1 ? (currentKitIndex === 0 ? kits.length - 1 : currentKitIndex - 1) : (currentKitIndex + 1) % kits.length;
     setCurrentKitIndex(newIdx);
     if (setStepsCount) setStepsCount(kits[newIdx].stepsCount || 16);
   };
 
-  // 🌟 FIX: Knob explicitly resizes only the CURRENT kit, not all of them
   const handleStepsChange = (val) => {
     const n = Number(val);
     if (setStepsCount) setStepsCount(n);
@@ -139,11 +130,11 @@ export default function StepSequencer({
     }));
   };
 
-  // ── Sync refs ──────────────────────────────────────────────────────────────
+  // Sync refs 
   useEffect(() => { gridRef.current = grid; volumeRef.current = volumes; mutedRef.current = mutedTracks; soundsRef.current = currentSounds; },
     [grid, volumes, mutedTracks, currentSounds]);
 
-  // ── Load session on mount ──────────────────────────────────────────────────
+  //  Load session on mount 
   useEffect(() => {
     const s = loadSession();
     if (s.bpm) setBpm(s.bpm);
@@ -155,14 +146,14 @@ export default function StepSequencer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Persist session ────────────────────────────────────────────────────────
+  // Persist session 
   useEffect(() => {
     if (!isLoaded) return;
     try { localStorage.setItem("beatforge_seq_session", JSON.stringify({ bpm, kitIndex: currentKitIndex, kits })); }
     catch { try { const light = kits.map(k => ({ ...k, sounds: k.sounds.map(s => s.file?.length > 500 ? { ...s, file: null, name: s.name + " (Unsaved)" } : s) })); localStorage.setItem("beatforge_seq_session", JSON.stringify({ bpm, kitIndex: currentKitIndex, kits: light })); } catch {} }
   }, [bpm, currentKitIndex, kits, isLoaded]);
 
-  // ── Reset when user changes ────────────────────────────────────────────────
+  // Reset when user changes 
   useEffect(() => {
     if (!isLoaded || currentUser?._id === prevUserRef.current?._id) { prevUserRef.current = currentUser; return; }
     setKits(initKits(DRUM_KITS, 16)); setCurrentKitIndex(0); setCurrentStep(0); lastStepRef.current = -1; setShowMixer(false);
@@ -172,7 +163,7 @@ export default function StepSequencer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isLoaded]);
 
-  // ── Preload audio ──────────────────────────────────────────────────────────
+  // Preload audio
   useEffect(() => {
     if (!audioCtx) return;
     (async () => {
@@ -188,12 +179,12 @@ export default function StepSequencer({
     })();
   }, [currentSounds]);
 
-  // ── Stop audio when playback stops ────────────────────────────────────────
+  // Stop audio when playback stops 
   useEffect(() => {
     if (!isCurrentlyPlaying) { activeNodes.current.forEach(n => { try { n.stop(); } catch {} }); activeNodes.current = []; }
   }, [isCurrentlyPlaying]);
 
-  // ── Sync deleted samples across all kits ──────────────────────────────────
+  //  Sync deleted samples across all kits 
   useEffect(() => {
     if (!isLoaded) return;
     if (prevSamplesRef.current?.length === mySamples.length + 1) {
@@ -203,7 +194,7 @@ export default function StepSequencer({
     prevSamplesRef.current = mySamples;
   }, [mySamples, isLoaded]);
 
-  // ── Playback scheduler ────────────────────────────────────────────────────
+  // Playback scheduler 
   useEffect(() => {
     const numSteps = kitSteps;
     if (!isCurrentlyPlaying || !playbackStartTime) { clearTimeout(intervalRef.current); setCurrentStep(0); lastStepRef.current = -1; vStartRef.current = 0; return; }
@@ -245,8 +236,7 @@ export default function StepSequencer({
   // Close context menu on outside click
   useEffect(() => { const close = () => setContextMenu(p => ({ ...p, visible: false })); document.addEventListener("click", close); return () => document.removeEventListener("click", close); }, []);
 
-  // ── Presets ────────────────────────────────────────────────────────────────
-
+  // Presets 
   useEffect(() => {
     if (!currentUser) { setPresets([]); return; }
     const token = localStorage.getItem("beatforge_token");
@@ -281,8 +271,7 @@ export default function StepSequencer({
     setPresetToDeleteIndex(null);
   };
 
-  // ── Grid actions ───────────────────────────────────────────────────────────
-
+  // Grid actions 
   const updateStep = (row, step, value) => {
     if (isLocked) return; if (setHasActiveBeat) setHasActiveBeat(true);
     updateKit(k => { const g = k.grid.map(r => [...(r || [])]); if (!g[row]) g[row] = Array(k.stepsCount || 16).fill(false); g[row][step] = value; return { ...k, grid: g }; });
@@ -292,7 +281,7 @@ export default function StepSequencer({
   const clearTrack = (row) => { if (isLocked) return; updateKit(k => { const g = k.grid.map(r => [...(r||[])]); if (g[row]) g[row] = g[row].map(() => false); return { ...k, grid: g }; }); };
   const deleteTrack = (row) => { if (currentSounds.length <= 1) return; updateKit(k => ({ ...k, sounds: k.sounds.filter((_, i) => i !== row), grid: k.grid.filter((_, i) => i !== row), volumes: k.volumes.filter((_, i) => i !== row), mutedTracks: k.mutedTracks.filter((_, i) => i !== row) })); };
 
-  // ── File upload ────────────────────────────────────────────────────────────
+  // File upload 
   const handleFileUpload = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
@@ -302,7 +291,7 @@ export default function StepSequencer({
     reader.readAsDataURL(file); e.target.value = null;
   };
 
-  // ── Live Pad ───────────────────────────────────────────────────────────────
+  //  Live Pad 
   const drumCount = () => (projectPatterns || []).filter(p => p.type === "drum").length;
   const initiateSaveToLivePad = () => { if (isLocked) { setShowProModal(true); return; } if (!gridRef.current.some(r => r?.some(Boolean))) { flash(setSaveStatus, "empty"); return; } setLivePadName(`Drums ${drumCount() + 1}`); setShowLivePadModal(true); };
   const confirmSaveToLivePad = () => {
@@ -311,13 +300,9 @@ export default function StepSequencer({
     if (setProjectPatterns) { setProjectPatterns(p => [...(p || []), pattern]); flash(setSaveStatus, "saved"); } setShowLivePadModal(false);
   };
 
-  // ── Preset button style ────────────────────────────────────────────────────
+  //  Preset button style 
   const PRESET_LABEL = { idle: "Save", no_name: "⚠️ NAME", no_user: "⚠️ LOGIN", saved: "✔️ SAVED", error: "⚠️ ERROR" };
   const presetBtnStyle = { background: ["no_name","no_user","error"].includes(presetSaveStatus) ? "#ff4757" : presetSaveStatus === "saved" ? "#00e676" : "transparent", color: presetSaveStatus !== "idle" ? (presetSaveStatus === "saved" ? "#000" : "#fff") : "var(--text-light)", border: presetSaveStatus !== "idle" ? "none" : "1px solid var(--border-dark)", minWidth: 85, justifyContent: "center", fontWeight: presetSaveStatus !== "idle" ? "bold" : "normal", transition: "all 0.2s" };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <>
